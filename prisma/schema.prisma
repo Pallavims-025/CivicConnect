@@ -1,0 +1,148 @@
+// CivicConnect - Prisma Database Schema
+// Database: MySQL
+// ORM: Prisma ORM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// ENUMS
+// -----------------------------------------------------------------------------
+
+enum UserRole {
+  CITIZEN
+  ADMIN
+}
+
+enum ComplaintStatus {
+  PENDING
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum ComplaintPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// -----------------------------------------------------------------------------
+// MODEL 1: USER
+// Stores citizen and administrator profile information.
+// Keeps authentication separate from database schema.
+// -----------------------------------------------------------------------------
+model User {
+  id        String   @id @default(uuid()) @db.VarChar(36)
+  name      String   @db.VarChar(255)
+  email     String   @unique @db.VarChar(191)
+  role      UserRole @default(CITIZEN)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  complaints Complaint[]
+  feedback   Feedback[]
+
+  @@map("users")
+}
+
+// -----------------------------------------------------------------------------
+// MODEL 2: CATEGORY
+// Stores types of civic issues (Potholes, Garbage Accumulation, etc.).
+// Uses auto-incrementing integer for simple categorization.
+// -----------------------------------------------------------------------------
+model Category {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique @db.VarChar(191)
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relationships
+  complaints Complaint[]
+
+  @@map("categories")
+}
+
+// -----------------------------------------------------------------------------
+// MODEL 3: COMPLAINT
+// Stores all civic complaints submitted by citizens.
+// -----------------------------------------------------------------------------
+model Complaint {
+  id          String            @id @default(uuid()) @db.VarChar(36)
+  title       String            @db.VarChar(255)
+  description String            @db.Text
+  status      ComplaintStatus   @default(PENDING)
+  priority    ComplaintPriority @default(MEDIUM)
+  latitude    Float?            @db.Double
+  longitude   Float?            @db.Double
+  address     String?           @db.VarChar(500)
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+  userId      String            @map("user_id") @db.VarChar(36)
+  categoryId  Int               @map("category_id")
+
+  // Relationships with safe referential actions
+  user       User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  category   Category         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  photos     ComplaintPhoto[]
+  feedback   Feedback[]
+
+  // Indexes supporting frequent dashboard queries
+  @@index([userId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([priority])
+  @@index([createdAt])
+  @@index([status, createdAt])
+  @@index([categoryId, status])
+  @@map("complaints")
+}
+
+// -----------------------------------------------------------------------------
+// MODEL 4: COMPLAINT PHOTO
+// Stores references / URLs to photos uploaded as evidence.
+// Image binaries are stored externally (e.g. Cloud Storage / CDN).
+// -----------------------------------------------------------------------------
+model ComplaintPhoto {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  imageUrl    String   @map("image_url") @db.VarChar(1000)
+  createdAt   DateTime @default(now()) @map("created_at")
+  complaintId String   @map("complaint_id") @db.VarChar(36)
+
+  // Cascade delete: removing a complaint cleans up its photo references
+  complaint Complaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+
+  @@index([complaintId])
+  @@map("complaint_photos")
+}
+
+// -----------------------------------------------------------------------------
+// MODEL 5: FEEDBACK
+// Allows citizens to rate resolution quality (1 to 5) after resolution.
+// One feedback record per citizen per complaint enforced by composite unique.
+// -----------------------------------------------------------------------------
+model Feedback {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  rating      Int
+  comment     String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  userId      String   @map("user_id") @db.VarChar(36)
+  complaintId String   @map("complaint_id") @db.VarChar(36)
+
+  // Relationships
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  complaint Complaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+
+  // Composite unique constraint: One citizen can only submit one feedback per complaint
+  @@unique([userId, complaintId])
+  @@index([complaintId])
+  @@index([userId])
+  @@map("feedback")
+}
