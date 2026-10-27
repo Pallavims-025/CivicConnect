@@ -65,7 +65,16 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
     { label: 'My Profile', path: '/officer/profile', icon: User },
   ];
 
-  const items = role === 'citizen' ? citizenNav : officerNav;
+  const adminNav = [
+    { label: 'Dashboard', path: '/admin', icon: LayoutDashboard },
+    { label: 'User & Roles', path: '/admin/users', icon: User },
+    { label: 'Departments', path: '/admin/departments', icon: Building2 },
+    { label: 'Audit History', path: '/officer/audit', icon: History },
+  ];
+
+  let items = citizenNav;
+  if (role === 'officer') items = officerNav;
+  else if (role === 'admin') items = adminNav;
 
   const handleSignOut = () => {
     navigate('/');
@@ -89,9 +98,8 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
 
       {/* Sidebar Container */}
       <aside
-        className={`fixed md:static inset-y-0 left-0 z-50 w-64 bg-[#163A63] text-white flex flex-col transition-transform duration-300 ease-in-out ${
-          isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-        } shadow-2xl md:shadow-none select-none`}
+        className={`fixed md:static inset-y-0 left-0 z-50 w-64 bg-[#163A63] text-white flex flex-col transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+          } shadow-2xl md:shadow-none select-none`}
       >
         {/* Brand Header */}
         <div className="h-16 px-5 flex items-center justify-between border-b border-white/10">
@@ -142,10 +150,9 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
                 end={item.path === '/citizen' || item.path === '/officer'}
                 onClick={onClose}
                 className={({ isActive }) =>
-                  `flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all ${
-                    isActive
-                      ? 'bg-civic-blue text-white shadow-md font-semibold'
-                      : 'text-blue-100/80 hover:bg-white/10 hover:text-white'
+                  `flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all ${isActive
+                    ? 'bg-civic-blue text-white shadow-md font-semibold'
+                    : 'text-blue-100/80 hover:bg-white/10 hover:text-white'
                   }`
                 }
               >
@@ -164,9 +171,8 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
 
                 {item.count !== undefined && item.count > 0 && (
                   <span
-                    className={`px-1.5 py-0.5 text-[10px] font-bold rounded-full ${
-                      item.countColor || 'bg-white/20 text-white'
-                    }`}
+                    className={`px-1.5 py-0.5 text-[10px] font-bold rounded-full ${item.countColor || 'bg-white/20 text-white'
+                      }`}
                   >
                     {item.count}
                   </span>
