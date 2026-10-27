@@ -29,6 +29,11 @@ import { ReportsAnalytics } from './pages/officer/ReportsAnalytics';
 import { OfficerNotifications } from './pages/officer/OfficerNotifications';
 import { AuditHistory } from './pages/officer/AuditHistory';
 import { OfficerProfile } from './pages/officer/OfficerProfile';
+// Admin Layout & Pages 
+import { AdminLayout } from './layouts/AdminLayout';
+import { AdminHome } from './pages/admin/AdminHome';
+import { UserManagement } from './pages/admin/UserManagement';
+import { DepartmentConfig } from './pages/admin/DepartmentConfig';
 
 export default function App() {
   return (
@@ -60,6 +65,12 @@ export default function App() {
         <Route path="notifications" element={<OfficerNotifications />} />
         <Route path="audit" element={<AuditHistory />} />
         <Route path="profile" element={<OfficerProfile />} />
+      </Route>
+      {/* System Administrator Portal Routes  */}
+      <Route path="/admin" element={<AdminLayout pageTitle="System Administration" />}>
+        <Route index element={<AdminHome />} />
+        <Route path="users" element={<UserManagement />} />
+        <Route path="departments" element={<DepartmentConfig />} />
       </Route>
 
       {/* Fallback route */}
