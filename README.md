@@ -1,10 +1,11 @@
-# CivicConnect — Complete Customer + Municipal Officer Dashboards
+# CivicConnect — Complete Customer + Municipal Officer + System Administrator Dashboards
 
-CivicConnect is a modern, unified civic issue reporting and municipal operations platform. It features two connected dashboards:
+CivicConnect is a modern, unified civic issue reporting and municipal operations platform. It features three connected role-based dashboards:
 1. **Customer (Citizen) Dashboard:** For reporting civic hazards (potholes, streetlights, garbage, water leaks, drainage) with photos & GPS coordinates, tracking resolution timelines, and submitting feedback.
 2. **Municipal Officer Dashboard:** For triaging complaints, automated duplicate detection, dispatching work orders, managing warehouse inventory, verifying field repair evidence, and inspecting analytics.
+3. **System Administrator Dashboard:** For platform telemetry, resolution rate KPIs, master user & role access control, municipal department configuration, and live audit tracking.
 
-Both dashboards are interconnected via a centralized **shared application state (React Context)**, allowing realistic end-to-end demonstrations where actions in one dashboard immediately update the other.
+All dashboards are interconnected via a centralized **shared application state (React Context)**, allowing realistic end-to-end demonstrations where actions in one dashboard immediately update the others.
 
 ---
 
@@ -15,7 +16,7 @@ Both dashboards are interconnected via a centralized **shared application state 
 - **Package Manager**: npm
 
 ### 2. Install & Start Development Server
-Open your terminal in `CivicConnect/CivicConnect` and run:
+Open your terminal in `CivicConnect` and run:
 
 ```bash
 # Install dependencies
@@ -39,7 +40,7 @@ npm run preview
 
 ## 🎨 Design System & Visual Palette
 
-Both dashboards share the same design language:
+All dashboards share the same design language:
 - **Primary Blue:** `#2563EB`
 - **Dark Navy Sidebar:** `#163A63`
 - **Page Background:** `#F5F7FB`
@@ -57,7 +58,7 @@ Both dashboards share the same design language:
 ## 🧭 Application Structure & Navigation
 
 ### 1. Landing Page / Role Switcher (`/`)
-- Choose between **Customer Dashboard** and **Municipal Officer Dashboard**.
+- Choose between **Customer Dashboard**, **Municipal Officer Dashboard**, and **System Administrator Dashboard**.
 - Displays real-time system metrics (total reports, pending triage, active work orders, resolved).
 
 ### 2. Customer Dashboard (`/citizen`)
@@ -85,6 +86,14 @@ Both dashboards share the same design language:
 | **Notifications** | `/officer/notifications` | Triage alerts, overdue work order reminders, mark as read, direct record links. |
 | **Audit History** | `/officer/audit` | Chronological immutable activity log recording all simulated citizen and officer actions. |
 | **Officer Profile** | `/officer/profile` | Engineer credentials, jurisdiction coverage, editable contact info. |
+
+### 4. System Administrator Dashboard (`/admin`) — *Member 4*
+| Page | Path | Features |
+|---|---|---|
+| **System Administration** | `/admin` | Platform telemetry, resolution rate KPIs, municipal department status, live audit event stream. |
+| **User & Role Management** | `/admin/users` | Master access control table across Citizens, Officers, Supervisors, and Admins with search and filters. |
+| **Department Config** | `/admin/departments` | Add and configure municipal departments and assign civic issue classification categories. |
+| **Audit History** | `/admin/audit` | Chronological activity log monitoring platform operations and administrative actions. |
 
 ---
 

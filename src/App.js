@@ -4,6 +4,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 // Layouts
 import { CitizenLayout } from './layouts/CitizenLayout';
 import { OfficerLayout } from './layouts/OfficerLayout';
+import { AdminLayout } from './layouts/AdminLayout';
 
 // Landing Page
 import { LandingPage } from './pages/LandingPage';
@@ -29,8 +30,8 @@ import { ReportsAnalytics } from './pages/officer/ReportsAnalytics';
 import { OfficerNotifications } from './pages/officer/OfficerNotifications';
 import { AuditHistory } from './pages/officer/AuditHistory';
 import { OfficerProfile } from './pages/officer/OfficerProfile';
-// Admin Layout & Pages 
-import { AdminLayout } from './layouts/AdminLayout';
+
+// Admin Pages (Member 4)
 import { AdminHome } from './pages/admin/AdminHome';
 import { UserManagement } from './pages/admin/UserManagement';
 import { DepartmentConfig } from './pages/admin/DepartmentConfig';
@@ -66,11 +67,13 @@ export default function App() {
         <Route path="audit" element={<AuditHistory />} />
         <Route path="profile" element={<OfficerProfile />} />
       </Route>
-      {/* System Administrator Portal Routes  */}
-      <Route path="/admin" element={<AdminLayout pageTitle="System Administration" />}>
+
+      {/* System Administrator Portal Routes (Member 4) */}
+      <Route path="/admin" element={<AdminLayout pageTitle="System Administration & Master Config" />}>
         <Route index element={<AdminHome />} />
         <Route path="users" element={<UserManagement />} />
         <Route path="departments" element={<DepartmentConfig />} />
+        <Route path="audit" element={<AuditHistory />} />
       </Route>
 
       {/* Fallback route */}
