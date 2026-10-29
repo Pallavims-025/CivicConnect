@@ -1,5 +1,5 @@
 // CivicConnect - Prisma Database Schema
-// Database: MySQL
+// Database: MySQL 8.x
 // ORM: Prisma ORM
 
 generator client {
@@ -17,13 +17,17 @@ datasource db {
 
 enum UserRole {
   CITIZEN
+  OFFICER
+  SUPERVISOR
   ADMIN
 }
 
 enum ComplaintStatus {
   PENDING
+  UNDER_REVIEW
   IN_PROGRESS
   RESOLVED
+  REJECTED
 }
 
 enum ComplaintPriority {
@@ -33,70 +37,187 @@ enum ComplaintPriority {
   CRITICAL
 }
 
+enum WorkOrderStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  AWAITING_VERIFICATION
+  COMPLETED
+  OVERDUE
+  REWORK_REQUIRED
+}
+
+enum VerificationStatus {
+  AWAITING_VERIFICATION
+  VERIFIED_APPROVED
+  REWORK_REQUESTED
+}
+
+enum StockStatus {
+  IN_STOCK
+  LOW_STOCK
+  OUT_OF_STOCK
+}
+
+enum MaterialRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum InventoryTransactionType {
+  STOCK_ADDITION
+  STOCK_DISPATCH
+  STOCK_ADJUSTMENT
+  STOCK_RETURN
+}
+
+enum PhotoType {
+  INITIAL_EVIDENCE
+  RESOLUTION_EVIDENCE
+}
+
+enum NotificationType {
+  COMPLAINT
+  WORK_ORDER
+  REPAIR_VERIFICATION
+  SYSTEM
+  GENERAL
+}
+
 // -----------------------------------------------------------------------------
-// MODEL 1: USER
-// Stores citizen and administrator profile information.
-// Keeps authentication separate from database schema.
+// MODEL 1: DEPARTMENT
+// Municipal departments responsible for complaint categories & work execution
 // -----------------------------------------------------------------------------
-model User {
-  id        String   @id @default(uuid()) @db.VarChar(36)
-  name      String   @db.VarChar(255)
-  email     String   @unique @db.VarChar(191)
-  role      UserRole @default(CITIZEN)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+model Department {
+  id           Int      @id @default(autoincrement())
+  code         String   @unique @db.VarChar(50)
+  name         String   @unique @db.VarChar(150)
+  description  String?  @db.Text
+  contactEmail String?  @map("contact_email") @db.VarChar(191)
+  contactPhone String?  @map("contact_phone") @db.VarChar(50)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   // Relationships
-  complaints Complaint[]
-  feedback   Feedback[]
+  categories     Category[]
+  users          User[]
+  complaints     Complaint[]
+  workOrders     WorkOrder[]
+  inventoryItems InventoryItem[]
 
+  @@map("departments")
+}
+
+// -----------------------------------------------------------------------------
+// MODEL 2: USER
+// Unified user model supporting Citizens, Officers, Supervisors, and Admins
+// -----------------------------------------------------------------------------
+model User {
+  id           String    @id @default(uuid()) @db.VarChar(36)
+  name         String    @db.VarChar(255)
+  email        String    @unique @db.VarChar(191)
+  role         UserRole  @default(CITIZEN)
+  phone        String?   @db.VarChar(50)
+  passwordHash String?   @map("password_hash") @db.VarChar(255)
+  avatarUrl    String?   @map("avatar_url") @db.VarChar(1000)
+  ward         String?   @db.VarChar(100)
+  address      String?   @db.VarChar(500)
+  title        String?   @db.VarChar(150)
+  departmentId Int?      @map("department_id")
+  wardCoverage String?   @map("ward_coverage") @db.VarChar(255)
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  // Department relationship
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  // Explicit named relationships
+  complaints                     Complaint[]              @relation("CitizenComplaints")
+  assignedComplaints             Complaint[]              @relation("AssignedOfficerComplaints")
+  uploadedPhotos                 ComplaintPhoto[]         @relation("PhotoUploader")
+  assignedWorkOrders             WorkOrder[]              @relation("AssignedSupervisorWorkOrders")
+  repairVerificationsSubmitted   RepairVerification[]     @relation("SupervisorVerifications")
+  repairVerificationsReviewed    RepairVerification[]     @relation("OfficerVerifications")
+  statusHistoryActions           ComplaintStatusHistory[] @relation("StatusHistoryActor")
+  materialRequestsRequested      MaterialRequest[]        @relation("RequestedMaterialRequests")
+  materialRequestsDecided        MaterialRequest[]        @relation("DecidedMaterialRequests")
+  inventoryTransactions          InventoryTransaction[]   @relation("TransactionUser")
+  notifications                  Notification[]
+  auditLogs                      AuditLog[]               @relation("AuditLogActor")
+  feedback                       Feedback[]
+
+  @@index([role])
+  @@index([departmentId])
   @@map("users")
 }
 
 // -----------------------------------------------------------------------------
-// MODEL 2: CATEGORY
-// Stores types of civic issues (Potholes, Garbage Accumulation, etc.).
-// Uses auto-incrementing integer for simple categorization.
+// MODEL 3: CATEGORY
+// Types of civic issues (Roads & Potholes, Garbage, Water Leakage, etc.)
 // -----------------------------------------------------------------------------
 model Category {
-  id          Int      @id @default(autoincrement())
-  name        String   @unique @db.VarChar(191)
-  description String?  @db.Text
-  createdAt   DateTime @default(now()) @map("created_at")
+  id           Int         @id @default(autoincrement())
+  name         String      @unique @db.VarChar(191)
+  description  String?     @db.Text
+  icon         String?     @db.VarChar(50)
+  color        String?     @db.VarChar(50)
+  departmentId Int?        @map("department_id")
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  isActive     Boolean     @default(true) @map("is_active")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @default(now()) @updatedAt @map("updated_at")
 
   // Relationships
   complaints Complaint[]
 
+  @@index([departmentId])
   @@map("categories")
 }
 
 // -----------------------------------------------------------------------------
-// MODEL 3: COMPLAINT
-// Stores all civic complaints submitted by citizens.
+// MODEL 4: COMPLAINT
+// Civic complaints filed by citizens, triaged and resolved by municipal staff
 // -----------------------------------------------------------------------------
 model Complaint {
-  id          String            @id @default(uuid()) @db.VarChar(36)
-  title       String            @db.VarChar(255)
-  description String            @db.Text
-  status      ComplaintStatus   @default(PENDING)
-  priority    ComplaintPriority @default(MEDIUM)
-  latitude    Float?            @db.Double
-  longitude   Float?            @db.Double
-  address     String?           @db.VarChar(500)
-  createdAt   DateTime          @default(now()) @map("created_at")
-  updatedAt   DateTime          @updatedAt @map("updated_at")
-  userId      String            @map("user_id") @db.VarChar(36)
-  categoryId  Int               @map("category_id")
+  id                String            @id @default(uuid()) @db.VarChar(36)
+  complaintCode     String?           @unique @map("complaint_code") @db.VarChar(50)
+  title             String            @db.VarChar(255)
+  description       String            @db.Text
+  status            ComplaintStatus   @default(PENDING)
+  priority          ComplaintPriority @default(MEDIUM)
+  latitude          Float?            @db.Double
+  longitude         Float?            @db.Double
+  address           String?           @db.VarChar(500)
+  rejectionReason   String?           @map("rejection_reason") @db.Text
+  resolutionNotes   String?           @map("resolution_notes") @db.Text
+  resolvedAt        DateTime?         @map("resolved_at")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+  userId            String            @map("user_id") @db.VarChar(36)
+  categoryId        Int               @map("category_id")
+  departmentId      Int?              @map("department_id")
+  assignedOfficerId String?           @map("assigned_officer_id") @db.VarChar(36)
 
-  // Relationships with safe referential actions
-  user       User             @relation(fields: [userId], references: [id], onDelete: Restrict)
-  category   Category         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  photos     ComplaintPhoto[]
-  feedback   Feedback[]
+  // Relationships with explicit names where necessary
+  user            User                     @relation("CitizenComplaints", fields: [userId], references: [id], onDelete: Restrict)
+  category        Category                 @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  department      Department?              @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  assignedOfficer User?                    @relation("AssignedOfficerComplaints", fields: [assignedOfficerId], references: [id], onDelete: SetNull)
+  photos          ComplaintPhoto[]
+  feedback        Feedback[]
+  workOrders      WorkOrder[]
+  statusHistory   ComplaintStatusHistory[]
+  repairVerifications RepairVerification[]
+  notifications   Notification[]
 
-  // Indexes supporting frequent dashboard queries
+  // Indexes supporting dashboard queries
   @@index([userId])
   @@index([categoryId])
+  @@index([departmentId])
+  @@index([assignedOfficerId])
   @@index([status])
   @@index([priority])
   @@index([createdAt])
@@ -106,27 +227,306 @@ model Complaint {
 }
 
 // -----------------------------------------------------------------------------
-// MODEL 4: COMPLAINT PHOTO
-// Stores references / URLs to photos uploaded as evidence.
-// Image binaries are stored externally (e.g. Cloud Storage / CDN).
+// MODEL 5: COMPLAINT PHOTO
+// Uploaded evidence photos and post-repair resolution images
 // -----------------------------------------------------------------------------
 model ComplaintPhoto {
-  id          String   @id @default(uuid()) @db.VarChar(36)
-  imageUrl    String   @map("image_url") @db.VarChar(1000)
-  createdAt   DateTime @default(now()) @map("created_at")
-  complaintId String   @map("complaint_id") @db.VarChar(36)
+  id           String    @id @default(uuid()) @db.VarChar(36)
+  imageUrl     String    @map("image_url") @db.VarChar(1000)
+  photoType    PhotoType @default(INITIAL_EVIDENCE) @map("photo_type")
+  caption      String?   @db.VarChar(255)
+  uploadedById String?   @map("uploaded_by_id") @db.VarChar(36)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  complaintId  String    @map("complaint_id") @db.VarChar(36)
 
-  // Cascade delete: removing a complaint cleans up its photo references
-  complaint Complaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+  // Cascade delete: removing a complaint cleans up its photo records
+  complaint  Complaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+  uploadedBy User?     @relation("PhotoUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
 
   @@index([complaintId])
+  @@index([complaintId, photoType])
+  @@index([uploadedById])
   @@map("complaint_photos")
 }
 
 // -----------------------------------------------------------------------------
-// MODEL 5: FEEDBACK
-// Allows citizens to rate resolution quality (1 to 5) after resolution.
-// One feedback record per citizen per complaint enforced by composite unique.
+// MODEL 6: WORK ORDER
+// Repair and maintenance assignments issued to field supervisors and crews
+// -----------------------------------------------------------------------------
+model WorkOrder {
+  id              String            @id @default(uuid()) @db.VarChar(36)
+  workOrderCode   String?           @unique @map("work_order_code") @db.VarChar(50)
+  complaintId     String            @map("complaint_id") @db.VarChar(36)
+  departmentId    Int               @map("department_id")
+  supervisorId    String?           @map("supervisor_id") @db.VarChar(36)
+  supervisorName  String?           @map("supervisor_name") @db.VarChar(255)
+  priority        ComplaintPriority @default(MEDIUM)
+  status          WorkOrderStatus   @default(PENDING)
+  progress        Int               @default(0)
+  workDescription String            @map("work_description") @db.Text
+  assignedCrew    String?           @map("assigned_crew") @db.VarChar(255)
+  estimatedCost   Decimal           @default(0.00) @map("estimated_cost") @db.Decimal(12, 2)
+  actualCost      Decimal?          @map("actual_cost") @db.Decimal(12, 2)
+  beforePhotoUrl  String?           @map("before_photo_url") @db.VarChar(1000)
+  afterPhotoUrl   String?           @map("after_photo_url") @db.VarChar(1000)
+  issuedDate      DateTime          @default(now()) @map("issued_date")
+  deadline        DateTime          @map("deadline")
+  completedDate   DateTime?         @map("completed_date")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  // Relationships
+  complaint            Complaint              @relation(fields: [complaintId], references: [id], onDelete: Restrict)
+  department           Department             @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  supervisor           User?                  @relation("AssignedSupervisorWorkOrders", fields: [supervisorId], references: [id], onDelete: SetNull)
+  repairVerifications  RepairVerification[]
+  materialRequests     MaterialRequest[]
+  inventoryTransactions InventoryTransaction[]
+  notifications        Notification[]
+
+  @@index([complaintId])
+  @@index([departmentId])
+  @@index([supervisorId])
+  @@index([status])
+  @@index([deadline])
+  @@map("work_orders")
+}
+
+// -----------------------------------------------------------------------------
+// MODEL 7: INVENTORY ITEM
+// Materials and equipment tracked in municipal warehouses
+// -----------------------------------------------------------------------------
+model InventoryItem {
+  id                String       @id @default(uuid()) @db.VarChar(36)
+  itemCode          String?      @unique @map("item_code") @db.VarChar(50)
+  name              String       @db.VarChar(255)
+  category          String       @db.VarChar(100)
+  description       String?      @db.Text
+  unit              String       @db.VarChar(50)
+  availableQuantity Int          @default(0) @map("available_quantity")
+  minThreshold      Int          @default(10) @map("min_threshold")
+  unitCost          Decimal      @default(0.00) @map("unit_cost") @db.Decimal(10, 2)
+  stockStatus       StockStatus  @default(IN_STOCK) @map("stock_status")
+  departmentId      Int?         @map("department_id")
+  department        Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  // Relationships
+  requestItems MaterialRequestItem[]
+  transactions InventoryTransaction[]
+
+  @@index([category])
+  @@index([stockStatus])
+  @@index([departmentId])
+  @@map("inventory_items")
+}
+
+// -----------------------------------------------------------------------------
+// MODEL 8: MATERIAL REQUEST
+// Requisitions created by field supervisors for active work orders
+// -----------------------------------------------------------------------------
+model MaterialRequest {
+  id                 String                @id @default(uuid()) @db.VarChar(36)
+  requestCode        String?               @unique @map("request_code") @db.VarChar(50)
+  workOrderId        String                @map("work_order_id") @db.VarChar(36)
+  requestedByUserId  String?               @map("requested_by_user_id") @db.VarChar(36)
+  requestedByName    String                @map("requested_by_name") @db.VarChar(255)
+  priority           ComplaintPriority     @default(MEDIUM)
+  status             MaterialRequestStatus @default(PENDING)
+  reason             String                @db.Text
+  decisionNotes      String?               @map("decision_notes") @db.Text
+  decidedByUserId    String?               @map("decided_by_user_id") @db.VarChar(36)
+  requestDate        DateTime              @default(now()) @map("request_date")
+  decidedAt          DateTime?             @map("decided_at")
+  createdAt          DateTime              @default(now()) @map("created_at")
+  updatedAt          DateTime              @updatedAt @map("updated_at")
+
+  // Relationships
+  workOrder          WorkOrder              @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  requestedByUser    User?                  @relation("RequestedMaterialRequests", fields: [requestedByUserId], references: [id], onDelete: SetNull)
+  decidedByUser      User?                  @relation("DecidedMaterialRequests", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+  items              MaterialRequestItem[]
+  transactions       InventoryTransaction[]
+
+  @@index([workOrderId])
+  @@index([status])
+  @@index([requestedByUserId])
+  @@index([decidedByUserId])
+  @@map("material_requests")
+}
+
+// -----------------------------------------------------------------------------
+// MODEL 9: MATERIAL REQUEST ITEM
+// Line items tied to a material requisition
+// -----------------------------------------------------------------------------
+model MaterialRequestItem {
+  id                String          @id @default(uuid()) @db.VarChar(36)
+  materialRequestId String          @map("material_request_id") @db.VarChar(36)
+  inventoryItemId   String          @map("inventory_item_id") @db.VarChar(36)
+  requestedQty      Int             @map("requested_qty")
+  approvedQty       Int             @default(0) @map("approved_qty")
+  createdAt         DateTime        @default(now()) @map("created_at")
+
+  materialRequest MaterialRequest @relation(fields: [materialRequestId], references: [id], onDelete: Cascade)
+  inventoryItem   InventoryItem   @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+
+  @@unique([materialRequestId, inventoryItemId])
+  @@index([inventoryItemId])
+  @@map("material_request_items")
+}
+
+// -----------------------------------------------------------------------------
+// MODEL 10: INVENTORY TRANSACTION
+// Stock ledger of stock additions, dispatches, adjustments, and returns
+// -----------------------------------------------------------------------------
+model InventoryTransaction {
+  id                String                   @id @default(uuid()) @db.VarChar(36)
+  inventoryItemId   String                   @map("inventory_item_id") @db.VarChar(36)
+  transactionType   InventoryTransactionType @map("transaction_type")
+  quantityChange    Int                      @map("quantity_change")
+  balanceAfter      Int                      @map("balance_after")
+  materialRequestId String?                  @map("material_request_id") @db.VarChar(36)
+  workOrderId       String?                  @map("work_order_id") @db.VarChar(36)
+  reason            String                   @db.VarChar(255)
+  performedByUserId String?                  @map("performed_by_user_id") @db.VarChar(36)
+  createdAt         DateTime                 @default(now()) @map("created_at")
+
+  // Relationships
+  inventoryItem   InventoryItem    @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  materialRequest MaterialRequest? @relation(fields: [materialRequestId], references: [id], onDelete: SetNull)
+  workOrder       WorkOrder?       @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
+  performedByUser User?            @relation("TransactionUser", fields: [performedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([inventoryItemId])
+  @@index([transactionType])
+  @@index([workOrderId])
+  @@index([performedByUserId])
+  @@index([createdAt])
+  @@map("inventory_transactions")
+}
+
+// -----------------------------------------------------------------------------
+// MODEL 11: REPAIR VERIFICATION
+// Inspection outcomes, before-and-after evidence, approvals, and rework requests
+// -----------------------------------------------------------------------------
+model RepairVerification {
+  id                       String             @id @default(uuid()) @db.VarChar(36)
+  verificationCode         String?            @unique @map("verification_code") @db.VarChar(50)
+  complaintId              String             @map("complaint_id") @db.VarChar(36)
+  workOrderId              String             @map("work_order_id") @db.VarChar(36)
+  submittedBySupervisorId  String?            @map("submitted_by_supervisor_id") @db.VarChar(36)
+  supervisorName           String             @map("supervisor_name") @db.VarChar(255)
+  completionDetails        String             @map("completion_details") @db.Text
+  beforePhotoUrl           String?            @map("before_photo_url") @db.VarChar(1000)
+  completionPhotoUrl       String             @map("completion_photo_url") @db.VarChar(1000)
+  status                   VerificationStatus @default(AWAITING_VERIFICATION)
+  verifiedByOfficerId      String?            @map("verified_by_officer_id") @db.VarChar(36)
+  officerRemarks           String?            @map("officer_remarks") @db.Text
+  submittedAt              DateTime           @default(now()) @map("submitted_at")
+  verifiedAt               DateTime?          @map("verified_at")
+  createdAt                DateTime           @default(now()) @map("created_at")
+  updatedAt                DateTime           @updatedAt @map("updated_at")
+
+  // Relationships
+  complaint             Complaint @relation(fields: [complaintId], references: [id], onDelete: Restrict)
+  workOrder             WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  submittedBySupervisor User?     @relation("SupervisorVerifications", fields: [submittedBySupervisorId], references: [id], onDelete: SetNull)
+  verifiedByOfficer     User?     @relation("OfficerVerifications", fields: [verifiedByOfficerId], references: [id], onDelete: SetNull)
+
+  @@index([complaintId])
+  @@index([workOrderId])
+  @@index([status])
+  @@index([submittedBySupervisorId])
+  @@index([verifiedByOfficerId])
+  @@map("repair_verifications")
+}
+
+// -----------------------------------------------------------------------------
+// MODEL 12: COMPLAINT STATUS HISTORY
+// Immutable audit trail of complaint transitions with actors and notes
+// -----------------------------------------------------------------------------
+model ComplaintStatusHistory {
+  id                String           @id @default(uuid()) @db.VarChar(36)
+  complaintId       String           @map("complaint_id") @db.VarChar(36)
+  previousStatus    ComplaintStatus? @map("previous_status")
+  newStatus         ComplaintStatus  @map("new_status")
+  title             String           @db.VarChar(255)
+  notes             String?          @db.Text
+  performedByUserId String?          @map("performed_by_user_id") @db.VarChar(36)
+  performedByName   String           @map("performed_by_name") @db.VarChar(255)
+  createdAt         DateTime         @default(now()) @map("created_at")
+
+  // Relationships
+  complaint       Complaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+  performedByUser User?     @relation("StatusHistoryActor", fields: [performedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([complaintId])
+  @@index([performedByUserId])
+  @@index([createdAt])
+  @@map("complaint_status_history")
+}
+
+// -----------------------------------------------------------------------------
+// MODEL 13: NOTIFICATION
+// In-app notifications delivered to citizens, officers, and supervisors
+// -----------------------------------------------------------------------------
+model Notification {
+  id               String           @id @default(uuid()) @db.VarChar(36)
+  notificationCode String?          @unique @map("notification_code") @db.VarChar(50)
+  userId           String?          @map("user_id") @db.VarChar(36)
+  targetRole       String           @default("ALL") @map("target_role") @db.VarChar(50)
+  title            String           @db.VarChar(255)
+  message          String           @db.Text
+  notificationType NotificationType @default(GENERAL) @map("notification_type")
+  complaintId      String?          @map("complaint_id") @db.VarChar(36)
+  workOrderId      String?          @map("work_order_id") @db.VarChar(36)
+  linkId           String?          @map("link_id") @db.VarChar(100)
+  isRead           Boolean          @default(false) @map("is_read")
+  createdAt        DateTime         @default(now()) @map("created_at")
+
+  // Relationships
+  user      User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  complaint Complaint? @relation(fields: [complaintId], references: [id], onDelete: SetNull)
+  workOrder WorkOrder? @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([targetRole, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// -----------------------------------------------------------------------------
+// MODEL 14: AUDIT LOG
+// System-wide security and event audit trail
+// -----------------------------------------------------------------------------
+model AuditLog {
+  id             String   @id @default(uuid()) @db.VarChar(36)
+  auditCode      String?  @unique @map("audit_code") @db.VarChar(50)
+  userId         String?  @map("user_id") @db.VarChar(36)
+  actorName      String   @map("actor_name") @db.VarChar(255)
+  action         String   @db.VarChar(100)
+  entityType     String?  @map("entity_type") @db.VarChar(50)
+  entityId       String?  @map("entity_id") @db.VarChar(100)
+  affectedRecord String   @map("affected_record") @db.VarChar(255)
+  details        String   @db.Text
+  ipAddress      String?  @map("ip_address") @db.VarChar(45)
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Actor relationship
+  user User? @relation("AuditLogActor", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+// -----------------------------------------------------------------------------
+// MODEL 15: FEEDBACK
+// Citizen 1 to 5 star ratings and feedback submitted after resolution
 // -----------------------------------------------------------------------------
 model Feedback {
   id          String   @id @default(uuid()) @db.VarChar(36)
