@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_users_code` (`user_code`),
   UNIQUE KEY `uq_users_email` (`email`),
+  UNIQUE KEY `uq_users_phone` (`phone`),
   KEY `idx_users_role` (`role`),
   KEY `idx_users_department` (`department_id`),
   KEY `idx_users_ward` (`ward`),
