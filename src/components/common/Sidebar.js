@@ -18,14 +18,14 @@ import {
   History,
   Building2,
   X,
-  Layers,
-  Settings,
 } from 'lucide-react';
 import { useCivic } from '../../context/CivicContext';
+import { useAuth } from '../../context/AuthContext';
 
 export function Sidebar({ role = 'citizen', isOpen, onClose }) {
   const navigate = useNavigate();
-  const { complaints, workOrders, verifications, duplicates, notifications, setCurrentRole } = useCivic();
+  const { complaints, workOrders, verifications, duplicates } = useCivic();
+  const { logout } = useAuth();
 
   const citizenPendingCount = complaints.filter(
     (c) => c.status === 'PENDING' || c.status === 'UNDER_REVIEW'
@@ -78,16 +78,7 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
   else if (role === 'admin') items = adminNav;
 
   const handleSignOut = () => {
-    navigate('/');
-  };
-
-  const handleRoleToggle = () => {
-    let next = 'citizen';
-    if (role === 'citizen') next = 'officer';
-    else if (role === 'officer') next = 'admin';
-    else if (role === 'admin') next = 'citizen';
-    setCurrentRole(next);
-    navigate(`/${next}`);
+    logout().finally(() => navigate('/login', { replace: true }));
   };
 
   return (
@@ -134,14 +125,6 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
           <span className="text-blue-200/70 text-[11px] font-medium uppercase tracking-wider">
             {role === 'citizen' ? 'Citizen Interface' : role === 'officer' ? 'Operations Staff' : 'System Administration'}
           </span>
-          <button
-            onClick={handleRoleToggle}
-            className="text-[11px] text-blue-300 hover:text-white flex items-center space-x-1 font-semibold hover:underline"
-            title="Switch view"
-          >
-            <Layers className="w-3 h-3" />
-            <span>Switch</span>
-          </button>
         </div>
 
         {/* Navigation Items */}
@@ -196,7 +179,7 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
             className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-rose-200 hover:bg-rose-500/20 hover:text-rose-100 transition-colors"
           >
             <LogOut className="w-4 h-4 shrink-0" />
-            <span>Sign Out / Switch Mode</span>
+            <span>Sign out</span>
           </button>
         </div>
       </aside>

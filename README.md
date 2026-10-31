@@ -22,9 +22,21 @@ Open your terminal in `CivicConnect` and run:
 # Install dependencies
 npm install
 
-# Start Vite development server
+# Start the Express API and Vite frontend together
 npm run dev
 ```
+
+Before starting, copy `.env.example` to `.env` and configure `DATABASE_URL` and `JWT_SECRET`. The API runs on port 5000 and Vite on port 5173; signup and login require both services and a reachable MySQL database.
+
+### Initial Administrator Account
+
+Before starting the app, set `ADMIN_EMAIL` and a unique `ADMIN_PASSWORD` (at least 12 characters) in your local `.env` file. You can optionally set `ADMIN_NAME`; if omitted, the email name is used. Then run the one-time setup command from the project directory:
+
+```bash
+npm run seed:admin
+```
+
+The script hashes the password with the same bcrypt settings used by login and inserts an approved `ADMIN` into the existing `users` table. It refuses to create another administrator if any `ADMIN` account already exists. The setup values are used only by this local command; there is no public administrator signup or provisioning endpoint. Sign in from the existing login page with `ADMIN_EMAIL` and `ADMIN_PASSWORD` to access `/admin`.
 
 The application will be live at:
 👉 **`http://localhost:5173/`**
