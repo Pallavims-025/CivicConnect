@@ -20,12 +20,28 @@ import {
   X,
   Layers,
   Settings,
+  Users,
+  Camera,
+  TrendingUp,
+  ClipboardList,
+  Boxes,
+  FileSpreadsheet,
+  HardHat,
 } from 'lucide-react';
 import { useCivic } from '../../context/CivicContext';
 
 export function Sidebar({ role = 'citizen', isOpen, onClose }) {
   const navigate = useNavigate();
-  const { complaints, workOrders, verifications, duplicates, notifications, setCurrentRole } = useCivic();
+  const {
+    complaints,
+    workOrders,
+    verifications,
+    duplicates,
+    notifications,
+    materialRequests,
+    setCurrentRole,
+    supervisorProfile,
+  } = useCivic();
 
   const citizenPendingCount = complaints.filter(
     (c) => c.status === 'PENDING' || c.status === 'UNDER_REVIEW'
@@ -41,6 +57,19 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
 
   const pendingDuplicateCount = duplicates ? duplicates.filter(
     (d) => d.reviewStatus === 'PENDING_REVIEW'
+  ).length : 0;
+
+  // Supervisor metrics
+  const supervisorActiveWOCount = workOrders ? workOrders.filter(
+    (w) => w.status === 'IN_PROGRESS' || w.status === 'OVERDUE' || w.status === 'REWORK_REQUIRED'
+  ).length : 0;
+
+  const supervisorPendingRequestsCount = materialRequests ? materialRequests.filter(
+    (m) => m.status === 'Pending Approval' || m.status === 'PENDING'
+  ).length : 0;
+
+  const supervisorUnreadNotifCount = notifications ? notifications.filter(
+    (n) => n.role === 'supervisor' && !n.read
   ).length : 0;
 
   const citizenNav = [
@@ -66,6 +95,20 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
     { label: 'My Profile', path: '/officer/profile', icon: User },
   ];
 
+  // Section 5: Field Supervisor Sidebar
+  const supervisorNav = [
+    { label: 'Dashboard', path: '/supervisor', icon: LayoutDashboard },
+    { label: 'Assigned Work Orders', path: '/supervisor/work-orders', icon: Briefcase, count: supervisorActiveWOCount, countColor: 'bg-blue-500' },
+    { label: 'Worker Assignments', path: '/supervisor/worker-assignments', icon: Users },
+    { label: 'Repair Progress', path: '/supervisor/repair-progress', icon: TrendingUp },
+    { label: 'Photo Evidence', path: '/supervisor/photo-evidence', icon: Camera },
+    { label: 'Material Inventory', path: '/supervisor/material-inventory', icon: Boxes },
+    { label: 'Material Requests', path: '/supervisor/material-requests', icon: ClipboardList, count: supervisorPendingRequestsCount, countColor: 'bg-amber-500' },
+    { label: 'Progress Reports', path: '/supervisor/progress-reports', icon: FileSpreadsheet },
+    { label: 'Notifications', path: '/supervisor/notifications', icon: Bell, count: supervisorUnreadNotifCount, countColor: 'bg-rose-500' },
+    { label: 'My Profile', path: '/supervisor/profile', icon: User },
+  ];
+
   const adminNav = [
     { label: 'Dashboard', path: '/admin', icon: LayoutDashboard },
     { label: 'User & Roles', path: '/admin/users', icon: User },
@@ -75,6 +118,7 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
 
   let items = citizenNav;
   if (role === 'officer') items = officerNav;
+  else if (role === 'supervisor') items = supervisorNav;
   else if (role === 'admin') items = adminNav;
 
   const handleSignOut = () => {
@@ -84,7 +128,8 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
   const handleRoleToggle = () => {
     let next = 'citizen';
     if (role === 'citizen') next = 'officer';
-    else if (role === 'officer') next = 'admin';
+    else if (role === 'officer') next = 'supervisor';
+    else if (role === 'supervisor') next = 'admin';
     else if (role === 'admin') next = 'citizen';
     setCurrentRole(next);
     navigate(`/${next}`);
@@ -131,8 +176,17 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
 
         {/* Current Mode Badge */}
         <div className="px-4 py-2.5 bg-[#0F2742]/50 border-b border-white/5 flex items-center justify-between text-xs">
-          <span className="text-blue-200/70 text-[11px] font-medium uppercase tracking-wider">
-            {role === 'citizen' ? 'Citizen Interface' : role === 'officer' ? 'Operations Staff' : 'System Administration'}
+          <span className="text-blue-200/70 text-[11px] font-medium uppercase tracking-wider flex items-center space-x-1">
+            {role === 'supervisor' && <HardHat className="w-3 h-3 text-amber-400 mr-1" />}
+            <span>
+              {role === 'citizen'
+                ? 'Citizen Interface'
+                : role === 'officer'
+                ? 'Operations Staff'
+                : role === 'supervisor'
+                ? 'Field Supervision'
+                : 'System Administration'}
+            </span>
           </span>
           <button
             onClick={handleRoleToggle}
@@ -152,7 +206,12 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
               <NavLink
                 key={item.path}
                 to={item.path}
-                end={item.path === '/citizen' || item.path === '/officer' || item.path === '/admin'}
+                end={
+                  item.path === '/citizen' ||
+                  item.path === '/officer' ||
+                  item.path === '/supervisor' ||
+                  item.path === '/admin'
+                }
                 onClick={onClose}
                 className={({ isActive }) =>
                   `flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all ${
@@ -169,7 +228,9 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
 
                 {item.badge && (
                   <span
-                    className={`px-1.5 py-0.5 text-[10px] font-bold rounded-md text-white ${item.badgeColor || 'bg-blue-500'}`}
+                    className={`px-1.5 py-0.5 text-[10px] font-bold rounded-md text-white ${
+                      item.badgeColor || 'bg-blue-500'
+                    }`}
                   >
                     {item.badge}
                   </span>

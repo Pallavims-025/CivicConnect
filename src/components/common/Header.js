@@ -10,6 +10,8 @@ import {
   ChevronDown,
   ExternalLink,
   Menu,
+  HardHat,
+  Settings,
 } from 'lucide-react';
 import { useCivic } from '../../context/CivicContext';
 
@@ -19,6 +21,7 @@ export function Header({ title, onToggleMobileSidebar }) {
     setCurrentRole,
     citizenProfile,
     officerProfile,
+    supervisorProfile,
     notifications,
     markNotificationRead,
     markAllNotificationsRead,
@@ -39,12 +42,36 @@ export function Header({ title, onToggleMobileSidebar }) {
     setShowRoleMenu(false);
     if (newRole === 'citizen') {
       navigate('/citizen');
-    } else {
+    } else if (newRole === 'officer') {
       navigate('/officer');
+    } else if (newRole === 'supervisor') {
+      navigate('/supervisor');
+    } else if (newRole === 'admin') {
+      navigate('/admin');
     }
   };
 
-  const activeUser = currentRole === 'citizen' ? citizenProfile : officerProfile;
+  let activeUser = citizenProfile;
+  let roleDisplayName = 'Citizen';
+  let portalSubtitle = 'Citizen Portal';
+
+  if (currentRole === 'officer') {
+    activeUser = officerProfile;
+    roleDisplayName = 'Officer';
+    portalSubtitle = 'Municipal Operations Command';
+  } else if (currentRole === 'supervisor') {
+    activeUser = supervisorProfile;
+    roleDisplayName = 'Supervisor';
+    portalSubtitle = 'Field Operations & Supervision';
+  } else if (currentRole === 'admin') {
+    activeUser = {
+      name: 'Super Admin',
+      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+      title: 'Administrator',
+    };
+    roleDisplayName = 'Admin';
+    portalSubtitle = 'System Administration';
+  }
 
   return (
     <header className="h-16 bg-white border-b border-slate-200 px-4 md:px-8 flex items-center justify-between sticky top-0 z-30 shadow-xs">
@@ -63,11 +90,11 @@ export function Header({ title, onToggleMobileSidebar }) {
           </h1>
           <div className="flex items-center space-x-2 text-xs text-civic-muted">
             <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-50 text-civic-blue font-medium text-[11px] border border-blue-200">
-              Municipal Grievance System
+              CivicConnect Platform
             </span>
             <span className="hidden sm:inline">•</span>
-            <span className="hidden sm:inline">
-              {currentRole === 'citizen' ? 'Citizen Portal' : 'Municipal Operations Command'}
+            <span className="hidden sm:inline text-slate-600 font-medium">
+              {portalSubtitle}
             </span>
           </div>
         </div>
@@ -79,31 +106,32 @@ export function Header({ title, onToggleMobileSidebar }) {
           <button
             onClick={() => setShowRoleMenu(!showRoleMenu)}
             className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors border border-slate-300 shadow-xs"
-            title="Switch between Citizen and Municipal Officer view"
+            title="Switch between Citizen, Officer, Supervisor, and Admin view"
           >
             <Layers className="w-3.5 h-3.5 text-civic-blue" />
             <span className="hidden sm:inline">Role:</span>
             <span className="text-civic-blue font-bold">
-              {currentRole === 'citizen' ? 'Citizen' : 'Officer'}
+              {roleDisplayName}
             </span>
             <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
           </button>
 
           {showRoleMenu && (
-            <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50">
+            <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50">
               <div className="px-3 py-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                 Select Interactive View
               </div>
+
               <button
                 onClick={() => handleRoleSwitch('citizen')}
                 className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-slate-50 ${
                   currentRole === 'citizen' ? 'bg-blue-50/70 font-semibold text-civic-blue' : 'text-slate-700'
                 }`}
               >
-                <div className="flex items-center space-x-2">
-                  <User className="w-4 h-4 text-civic-blue" />
+                <div className="flex items-center space-x-2.5">
+                  <User className="w-4 h-4 text-blue-600" />
                   <div>
-                    <p className="font-semibold">Customer (Citizen) Dashboard</p>
+                    <p className="font-semibold text-slate-900">Citizen Dashboard</p>
                     <p className="text-[11px] text-slate-400">Report & track civic issues</p>
                   </div>
                 </div>
@@ -116,14 +144,46 @@ export function Header({ title, onToggleMobileSidebar }) {
                   currentRole === 'officer' ? 'bg-blue-50/70 font-semibold text-civic-blue' : 'text-slate-700'
                 }`}
               >
-                <div className="flex items-center space-x-2">
-                  <Shield className="w-4 h-4 text-civic-navy" />
+                <div className="flex items-center space-x-2.5">
+                  <Shield className="w-4 h-4 text-amber-600" />
                   <div>
-                    <p className="font-semibold">Municipal Officer Dashboard</p>
-                    <p className="text-[11px] text-slate-400">Work orders, inventory, repairs</p>
+                    <p className="font-semibold text-slate-900">Municipal Officer Dashboard</p>
+                    <p className="text-[11px] text-slate-400">Triage, work orders, verification</p>
                   </div>
                 </div>
                 {currentRole === 'officer' && <span className="w-2 h-2 rounded-full bg-civic-blue"></span>}
+              </button>
+
+              <button
+                onClick={() => handleRoleSwitch('supervisor')}
+                className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-slate-50 ${
+                  currentRole === 'supervisor' ? 'bg-blue-50/70 font-semibold text-civic-blue' : 'text-slate-700'
+                }`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <HardHat className="w-4 h-4 text-emerald-600" />
+                  <div>
+                    <p className="font-semibold text-slate-900">Field Supervisor Dashboard</p>
+                    <p className="text-[11px] text-slate-400">Crew, repair progress, materials, photos</p>
+                  </div>
+                </div>
+                {currentRole === 'supervisor' && <span className="w-2 h-2 rounded-full bg-civic-blue"></span>}
+              </button>
+
+              <button
+                onClick={() => handleRoleSwitch('admin')}
+                className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-slate-50 ${
+                  currentRole === 'admin' ? 'bg-blue-50/70 font-semibold text-civic-blue' : 'text-slate-700'
+                }`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <Settings className="w-4 h-4 text-purple-600" />
+                  <div>
+                    <p className="font-semibold text-slate-900">System Administrator</p>
+                    <p className="text-[11px] text-slate-400">Master configuration & audit</p>
+                  </div>
+                </div>
+                {currentRole === 'admin' && <span className="w-2 h-2 rounded-full bg-civic-blue"></span>}
               </button>
             </div>
           )}
@@ -182,7 +242,7 @@ export function Header({ title, onToggleMobileSidebar }) {
                       <div className="flex items-start justify-between">
                         <p className="font-semibold text-slate-800">{n.title}</p>
                         <span className="text-[10px] text-slate-400 whitespace-nowrap ml-2">
-                          {n.timestamp.split(' ')[1]}
+                          {n.timestamp ? n.timestamp.split(' ')[1] : ''}
                         </span>
                       </div>
                       <p className="text-slate-600 mt-0.5 line-clamp-2">{n.message}</p>
@@ -206,7 +266,7 @@ export function Header({ title, onToggleMobileSidebar }) {
               {activeUser.name}
             </p>
             <p className="text-[11px] text-slate-500 leading-tight">
-              {currentRole === 'citizen' ? 'Citizen' : 'Officer'}
+              {activeUser.department || roleDisplayName}
             </p>
           </div>
         </div>

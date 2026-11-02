@@ -4,12 +4,13 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 // Layouts
 import { CitizenLayout } from './layouts/CitizenLayout';
 import { OfficerLayout } from './layouts/OfficerLayout';
+import { SupervisorLayout } from './layouts/SupervisorLayout';
 import { AdminLayout } from './layouts/AdminLayout';
 
 // Landing Page
 import { LandingPage } from './pages/LandingPage';
 
-// Citizen Pages
+// Citizen Pages (Member 1)
 import { CitizenHome } from './pages/citizen/CitizenHome';
 import { ReportIssue } from './pages/citizen/ReportIssue';
 import { MyComplaints } from './pages/citizen/MyComplaints';
@@ -18,7 +19,7 @@ import { MyFeedback } from './pages/citizen/MyFeedback';
 import { CitizenProfile } from './pages/citizen/CitizenProfile';
 import { HelpSupport } from './pages/citizen/HelpSupport';
 
-// Officer Pages
+// Officer Pages (Member 2)
 import { OfficerHome } from './pages/officer/OfficerHome';
 import { ComplaintManagement } from './pages/officer/ComplaintManagement';
 import { ComplaintMap } from './pages/officer/ComplaintMap';
@@ -31,6 +32,18 @@ import { OfficerNotifications } from './pages/officer/OfficerNotifications';
 import { AuditHistory } from './pages/officer/AuditHistory';
 import { OfficerProfile } from './pages/officer/OfficerProfile';
 
+// Field Supervisor Pages (Member 3)
+import { SupervisorHome } from './pages/supervisor/SupervisorHome';
+import { AssignedWorkOrders } from './pages/supervisor/AssignedWorkOrders';
+import { WorkerAssignments } from './pages/supervisor/WorkerAssignments';
+import { RepairProgressTracking } from './pages/supervisor/RepairProgressTracking';
+import { PhotoEvidence } from './pages/supervisor/PhotoEvidence';
+import { MaterialInventory } from './pages/supervisor/MaterialInventory';
+import { MaterialRequests } from './pages/supervisor/MaterialRequests';
+import { ProgressReports } from './pages/supervisor/ProgressReports';
+import { SupervisorNotifications } from './pages/supervisor/SupervisorNotifications';
+import { SupervisorProfile } from './pages/supervisor/SupervisorProfile';
+
 // Admin Pages (Member 4)
 import { AdminHome } from './pages/admin/AdminHome';
 import { UserManagement } from './pages/admin/UserManagement';
@@ -42,7 +55,7 @@ export default function App() {
       {/* Landing / Role Selector */}
       <Route path="/" element={<LandingPage />} />
 
-      {/* Citizen / Customer Portal Routes */}
+      {/* Citizen / Customer Portal Routes (Member 1) */}
       <Route path="/citizen" element={<CitizenLayout pageTitle="Citizen Dashboard" />}>
         <Route index element={<CitizenHome />} />
         <Route path="report" element={<ReportIssue />} />
@@ -53,7 +66,7 @@ export default function App() {
         <Route path="help" element={<HelpSupport />} />
       </Route>
 
-      {/* Municipal Officer Portal Routes */}
+      {/* Municipal Officer Portal Routes (Member 2) */}
       <Route path="/officer" element={<OfficerLayout pageTitle="Municipal Operations Command" />}>
         <Route index element={<OfficerHome />} />
         <Route path="complaints" element={<ComplaintManagement />} />
@@ -66,6 +79,20 @@ export default function App() {
         <Route path="notifications" element={<OfficerNotifications />} />
         <Route path="audit" element={<AuditHistory />} />
         <Route path="profile" element={<OfficerProfile />} />
+      </Route>
+
+      {/* Field Supervisor Portal Routes (Member 3) */}
+      <Route path="/supervisor" element={<SupervisorLayout pageTitle="Field Operations & Supervision" />}>
+        <Route index element={<SupervisorHome />} />
+        <Route path="work-orders" element={<AssignedWorkOrders />} />
+        <Route path="worker-assignments" element={<WorkerAssignments />} />
+        <Route path="repair-progress" element={<RepairProgressTracking />} />
+        <Route path="photo-evidence" element={<PhotoEvidence />} />
+        <Route path="material-inventory" element={<MaterialInventory />} />
+        <Route path="material-requests" element={<MaterialRequests />} />
+        <Route path="progress-reports" element={<ProgressReports />} />
+        <Route path="notifications" element={<SupervisorNotifications />} />
+        <Route path="profile" element={<SupervisorProfile />} />
       </Route>
 
       {/* System Administrator Portal Routes (Member 4) */}
