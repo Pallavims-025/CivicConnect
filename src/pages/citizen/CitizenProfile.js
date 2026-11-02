@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   User,
@@ -13,14 +13,19 @@ import {
   Info,
 } from 'lucide-react';
 import { useCivic } from '../../context/CivicContext';
+import { useAuth } from '../../context/AuthContext';
 
 export function CitizenProfile() {
   const navigate = useNavigate();
   const { citizenProfile, updateCitizenProfile } = useCivic();
+  const profile = citizenProfile;
+  const { logout } = useAuth();
 
   const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState(citizenProfile);
+  const [formData, setFormData] = useState(profile);
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  useEffect(() => setFormData(profile), [profile]);
 
   const handleSave = (e) => {
     e.preventDefault();
@@ -60,13 +65,13 @@ export function CitizenProfile() {
       <div className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200 shadow-xs space-y-6">
         <div className="flex items-center space-x-4 pb-6 border-b border-slate-100">
           <img
-            src={citizenProfile.avatarUrl}
-            alt={citizenProfile.name}
+            src={profile.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'}
+            alt={profile.name}
             className="w-16 h-16 rounded-2xl object-cover ring-4 ring-blue-50"
           />
           <div>
-            <h3 className="text-lg font-bold text-slate-900">{citizenProfile.name}</h3>
-            <p className="text-xs text-slate-500">{citizenProfile.ward}</p>
+            <h3 className="text-lg font-bold text-slate-900">{profile.name}</h3>
+            <p className="text-xs text-slate-500">{profile.ward}</p>
             <span className="inline-block px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded-md border border-emerald-200 mt-1">
               Verified Citizen Account
             </span>
@@ -131,7 +136,7 @@ export function CitizenProfile() {
               <button
                 type="button"
                 onClick={() => {
-                  setFormData(citizenProfile);
+                  setFormData(profile);
                   setIsEditing(false);
                 }}
                 className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
@@ -151,25 +156,25 @@ export function CitizenProfile() {
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
                 <span className="text-slate-400 font-medium block mb-0.5">Email Address</span>
-                <span className="font-semibold text-slate-800">{citizenProfile.email}</span>
+                <span className="font-semibold text-slate-800">{profile.email}</span>
               </div>
               <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
                 <span className="text-slate-400 font-medium block mb-0.5">Phone Number</span>
-                <span className="font-semibold text-slate-800">{citizenProfile.phone}</span>
+                <span className="font-semibold text-slate-800">{profile.phone}</span>
               </div>
               <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
                 <span className="text-slate-400 font-medium block mb-0.5">Primary Ward</span>
-                <span className="font-semibold text-slate-800">{citizenProfile.ward}</span>
+                <span className="font-semibold text-slate-800">{profile.ward}</span>
               </div>
               <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
                 <span className="text-slate-400 font-medium block mb-0.5">Member Since</span>
-                <span className="font-semibold text-slate-800">{citizenProfile.joinedDate}</span>
+                <span className="font-semibold text-slate-800">{profile.joinedDate}</span>
               </div>
             </div>
 
             <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
               <span className="text-slate-400 font-medium block mb-0.5">Residential Address</span>
-              <span className="font-semibold text-slate-800">{citizenProfile.address}</span>
+              <span className="font-semibold text-slate-800">{profile.address}</span>
             </div>
 
             <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
@@ -181,7 +186,7 @@ export function CitizenProfile() {
               </button>
 
               <button
-                onClick={() => navigate('/')}
+                onClick={() => logout().then(() => navigate('/login', { replace: true }))}
                 className="text-rose-600 hover:text-rose-700 font-semibold text-xs flex items-center space-x-1"
               >
                 <LogOut className="w-3.5 h-3.5" />

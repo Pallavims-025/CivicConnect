@@ -1,50 +1,33 @@
 import React, { useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Bell,
   CheckCircle2,
   AlertTriangle,
-  User,
-  Shield,
   Layers,
-  ChevronDown,
-  ExternalLink,
   Menu,
 } from 'lucide-react';
 import { useCivic } from '../../context/CivicContext';
+import { useAuth } from '../../context/AuthContext';
 
 export function Header({ title, onToggleMobileSidebar }) {
   const {
     currentRole,
-    setCurrentRole,
     citizenProfile,
     officerProfile,
     notifications,
     markNotificationRead,
     markAllNotificationsRead,
   } = useCivic();
+  const { user } = useAuth();
 
   const [showNotifications, setShowNotifications] = useState(false);
-  const [showRoleMenu, setShowRoleMenu] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
-
   const relevantNotifications = notifications.filter(
     (n) => n.role === currentRole
   );
   const unreadCount = relevantNotifications.filter((n) => !n.read).length;
 
-  const handleRoleSwitch = (newRole) => {
-    setCurrentRole(newRole);
-    setShowRoleMenu(false);
-    if (newRole === 'citizen') {
-      navigate('/citizen');
-    } else {
-      navigate('/officer');
-    }
-  };
-
-  const activeUser = currentRole === 'citizen' ? citizenProfile : officerProfile;
+  const activeUser = user || (currentRole === 'citizen' ? citizenProfile : officerProfile);
+  const roleLabel = user?.role === 'ADMIN' ? 'Administrator' : user?.role === 'OFFICER' ? 'Municipal Officer' : user?.role === 'SUPERVISOR' ? 'Field Officer' : 'Citizen';
 
   return (
     <header className="h-16 bg-white border-b border-slate-200 px-4 md:px-8 flex items-center justify-between sticky top-0 z-30 shadow-xs">
@@ -66,9 +49,7 @@ export function Header({ title, onToggleMobileSidebar }) {
               Municipal Grievance System
             </span>
             <span className="hidden sm:inline">•</span>
-            <span className="hidden sm:inline">
-              {currentRole === 'citizen' ? 'Citizen Portal' : 'Municipal Operations Command'}
-            </span>
+            <span className="hidden sm:inline">{roleLabel} Portal</span>
           </div>
         </div>
       </div>
@@ -76,57 +57,11 @@ export function Header({ title, onToggleMobileSidebar }) {
       <div className="flex items-center space-x-3 md:space-x-4">
         {/* DEMO ROLE SWITCHER */}
         <div className="relative">
-          <button
-            onClick={() => setShowRoleMenu(!showRoleMenu)}
-            className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors border border-slate-300 shadow-xs"
-            title="Switch between Citizen and Municipal Officer view"
-          >
+          <div className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-300 shadow-xs">
             <Layers className="w-3.5 h-3.5 text-civic-blue" />
             <span className="hidden sm:inline">Role:</span>
-            <span className="text-civic-blue font-bold">
-              {currentRole === 'citizen' ? 'Citizen' : 'Officer'}
-            </span>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
-          </button>
-
-          {showRoleMenu && (
-            <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50">
-              <div className="px-3 py-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                Select Interactive View
-              </div>
-              <button
-                onClick={() => handleRoleSwitch('citizen')}
-                className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-slate-50 ${
-                  currentRole === 'citizen' ? 'bg-blue-50/70 font-semibold text-civic-blue' : 'text-slate-700'
-                }`}
-              >
-                <div className="flex items-center space-x-2">
-                  <User className="w-4 h-4 text-civic-blue" />
-                  <div>
-                    <p className="font-semibold">Customer (Citizen) Dashboard</p>
-                    <p className="text-[11px] text-slate-400">Report & track civic issues</p>
-                  </div>
-                </div>
-                {currentRole === 'citizen' && <span className="w-2 h-2 rounded-full bg-civic-blue"></span>}
-              </button>
-
-              <button
-                onClick={() => handleRoleSwitch('officer')}
-                className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-slate-50 ${
-                  currentRole === 'officer' ? 'bg-blue-50/70 font-semibold text-civic-blue' : 'text-slate-700'
-                }`}
-              >
-                <div className="flex items-center space-x-2">
-                  <Shield className="w-4 h-4 text-civic-navy" />
-                  <div>
-                    <p className="font-semibold">Municipal Officer Dashboard</p>
-                    <p className="text-[11px] text-slate-400">Work orders, inventory, repairs</p>
-                  </div>
-                </div>
-                {currentRole === 'officer' && <span className="w-2 h-2 rounded-full bg-civic-blue"></span>}
-              </button>
-            </div>
-          )}
+            <span className="text-civic-blue font-bold">{roleLabel}</span>
+          </div>
         </div>
 
         {/* NOTIFICATION BELL */}
@@ -197,7 +132,7 @@ export function Header({ title, onToggleMobileSidebar }) {
         {/* USER PROFILE SNIPPET */}
         <div className="flex items-center space-x-2 pl-2 border-l border-slate-200">
           <img
-            src={activeUser.avatarUrl}
+            src={activeUser.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'}
             alt={activeUser.name}
             className="w-8 h-8 rounded-full object-cover ring-2 ring-slate-200"
           />
@@ -206,7 +141,7 @@ export function Header({ title, onToggleMobileSidebar }) {
               {activeUser.name}
             </p>
             <p className="text-[11px] text-slate-500 leading-tight">
-              {currentRole === 'citizen' ? 'Citizen' : 'Officer'}
+              {roleLabel}
             </p>
           </div>
         </div>
