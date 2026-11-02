@@ -70,7 +70,9 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
     { label: 'Dashboard', path: '/admin', icon: LayoutDashboard },
     { label: 'User & Roles', path: '/admin/users', icon: User },
     { label: 'Departments', path: '/admin/departments', icon: Building2 },
+    { label: 'System Analytics', path: '/admin/analytics', icon: BarChart3 },
     { label: 'Audit History', path: '/admin/audit', icon: History },
+    { label: 'Admin Profile', path: '/admin/profile', icon: User },
   ];
 
   let items = citizenNav;

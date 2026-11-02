@@ -35,6 +35,8 @@ import { OfficerProfile } from './pages/officer/OfficerProfile';
 import { AdminHome } from './pages/admin/AdminHome';
 import { UserManagement } from './pages/admin/UserManagement';
 import { DepartmentConfig } from './pages/admin/DepartmentConfig';
+import { SystemAnalytics } from './pages/admin/SystemAnalytics';
+import { AdminProfile } from './pages/admin/AdminProfile';
 
 export default function App() {
   return (
@@ -73,7 +75,9 @@ export default function App() {
         <Route index element={<AdminHome />} />
         <Route path="users" element={<UserManagement />} />
         <Route path="departments" element={<DepartmentConfig />} />
+        <Route path="analytics" element={<SystemAnalytics />} />
         <Route path="audit" element={<AuditHistory />} />
+        <Route path="profile" element={<AdminProfile />} />
       </Route>
 
       {/* Fallback route */}

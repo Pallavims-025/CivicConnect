@@ -11,6 +11,8 @@ import {
   INITIAL_DUPLICATES,
   INITIAL_NOTIFICATIONS,
   INITIAL_AUDIT_LOGS,
+  INITIAL_USERS,
+  INITIAL_DEPARTMENTS,
 } from '../data/mockData';
 
 const CivicContext = createContext();
@@ -29,6 +31,8 @@ export function CivicProvider({ children }) {
   const [duplicates, setDuplicates] = useState(INITIAL_DUPLICATES);
   const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
   const [auditLogs, setAuditLogs] = useState(INITIAL_AUDIT_LOGS);
+  const [users, setUsers] = useState(INITIAL_USERS);
+  const [departments, setDepartments] = useState(INITIAL_DEPARTMENTS);
 
   const nowString = () => {
     const d = new Date();
@@ -574,6 +578,135 @@ export function CivicProvider({ children }) {
     logAudit(`${officerProfile.name} (Officer)`, 'UPDATE_PROFILE', 'Officer Account', 'Updated officer contact details.');
   };
 
+  // ADMIN ACTIONS (Member 4)
+  const addUser = ({ name, email, role, dept, status, phone }) => {
+    const newId = `USR-${(users.length + 1).toString().padStart(2, '0')}`;
+    const newUser = {
+      id: newId,
+      name,
+      email,
+      role: (role || 'citizen').toLowerCase(),
+      dept: dept || ((role || '').toLowerCase() === 'citizen' ? 'N/A' : 'General Operations'),
+      status: status || 'ACTIVE',
+      phone: phone || '',
+      joinedDate: nowString().split(' ')[0],
+    };
+    setUsers((prev) => [newUser, ...prev]);
+    logAudit(
+      'Santosh (Admin)',
+      'CREATE_USER',
+      `User ${newUser.name} (${newId})`,
+      `Created ${newUser.role.toUpperCase()} account assigned to ${newUser.dept}.`
+    );
+    return newUser;
+  };
+
+  const updateUser = (userId, updatedFields) => {
+    setUsers((prev) =>
+      prev.map((u) => (u.id === userId ? { ...u, ...updatedFields } : u))
+    );
+    const target = users.find((u) => u.id === userId);
+    logAudit(
+      'Santosh (Admin)',
+      'UPDATE_USER',
+      `User #${userId}`,
+      `Updated user settings for ${target ? target.name : userId}.`
+    );
+  };
+
+  const deleteUser = (userId) => {
+    const target = users.find((u) => u.id === userId);
+    setUsers((prev) => prev.filter((u) => u.id !== userId));
+    logAudit(
+      'Santosh (Admin)',
+      'DELETE_USER',
+      `User #${userId}`,
+      `Removed user account for ${target ? target.name : userId}.`
+    );
+  };
+
+  const addDepartment = ({ name, head, contactEmail, contactPhone, zone, categories }) => {
+    const newId = `D-${departments.length + 1}`;
+    const newDept = {
+      id: newId,
+      name,
+      head: head || 'Assigned Officer',
+      contactEmail: contactEmail || `${name.toLowerCase().replace(/[^a-z0-9]/g, '')}@civicconnect.org`,
+      contactPhone: contactPhone || '+91 80 2297 5000',
+      zone: zone || 'Zone 1-4',
+      categories: categories && categories.length > 0 ? categories : ['General Civic Work'],
+    };
+    setDepartments((prev) => [...prev, newDept]);
+    logAudit(
+      'Santosh (Admin)',
+      'CREATE_DEPARTMENT',
+      `Department ${name} (${newId})`,
+      `Created department under leadership of ${newDept.head}.`
+    );
+    return newDept;
+  };
+
+  const updateDepartment = (deptId, updatedFields) => {
+    setDepartments((prev) =>
+      prev.map((d) => (d.id === deptId ? { ...d, ...updatedFields } : d))
+    );
+    const target = departments.find((d) => d.id === deptId);
+    logAudit(
+      'Santosh (Admin)',
+      'UPDATE_DEPARTMENT',
+      `Department #${deptId}`,
+      `Updated parameters for ${target ? target.name : deptId}.`
+    );
+  };
+
+  const deleteDepartment = (deptId) => {
+    const target = departments.find((d) => d.id === deptId);
+    setDepartments((prev) => prev.filter((d) => d.id !== deptId));
+    logAudit(
+      'Santosh (Admin)',
+      'DELETE_DEPARTMENT',
+      `Department #${deptId}`,
+      `Removed municipal department ${target ? target.name : deptId}.`
+    );
+  };
+
+  const addCategoryToDepartment = (deptId, categoryName) => {
+    const trimmed = (categoryName || '').trim();
+    if (!trimmed) return;
+    setDepartments((prev) =>
+      prev.map((d) => {
+        if (d.id === deptId) {
+          if (d.categories.includes(trimmed)) return d;
+          return { ...d, categories: [...d.categories, trimmed] };
+        }
+        return d;
+      })
+    );
+    logAudit(
+      'Santosh (Admin)',
+      'ADD_DEPT_CATEGORY',
+      `Department #${deptId}`,
+      `Added category "${trimmed}".`
+    );
+  };
+
+  const removeCategoryFromDepartment = (deptId, categoryName) => {
+    setDepartments((prev) =>
+      prev.map((d) => {
+        if (d.id === deptId) {
+          return { ...d, categories: d.categories.filter((c) => c !== categoryName) };
+        }
+        return d;
+      })
+    );
+    logAudit(
+      'Santosh (Admin)',
+      'REMOVE_DEPT_CATEGORY',
+      `Department #${deptId}`,
+      `Removed category "${categoryName}".`
+    );
+  };
+
   return (
     <CivicContext.Provider
       value={{
@@ -606,6 +739,16 @@ export function CivicProvider({ children }) {
         markAllNotificationsRead,
         updateCitizenProfile,
         updateOfficerProfile,
+        users,
+        departments,
+        addUser,
+        updateUser,
+        deleteUser,
+        addDepartment,
+        updateDepartment,
+        deleteDepartment,
+        addCategoryToDepartment,
+        removeCategoryFromDepartment,
       }}
     >
       {children}

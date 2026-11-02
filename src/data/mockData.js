@@ -538,3 +538,18 @@ export const INITIAL_AUDIT_LOGS = [
     details: 'Submitted 5-star resolution rating: "Very fast response! The entire corner was cleared..."',
   },
 ];
+
+
+export const INITIAL_USERS = [
+  { id: 'USR-01', name: 'Dr. Aruna Rao', email: 'aruna.rao@municipal.gov', role: 'officer', dept: 'Public Works', status: 'ACTIVE', phone: '+91 94480 22334', joinedDate: '2026-01-10' },
+  { id: 'USR-02', name: 'Rajesh Kumar', email: 'rajesh.k@field.gov', role: 'supervisor', dept: 'Zone 4 Operations', status: 'ACTIVE', phone: '+91 94480 11223', joinedDate: '2026-01-12' },
+  { id: 'USR-03', name: 'Priya Sharma', email: 'priya.s@gmail.com', role: 'citizen', dept: 'N/A', status: 'ACTIVE', phone: '+91 98765 43210', joinedDate: '2026-01-15' },
+  { id: 'USR-04', name: 'Santosh (Admin)', email: 'admin@civicconnect.org', role: 'admin', dept: 'IT & Governance', status: 'ACTIVE', phone: '+91 91234 56789', joinedDate: '2026-01-01' },
+];
+
+export const INITIAL_DEPARTMENTS = [
+  { id: 'D-1', name: 'Road Infrastructure & Maintenance', head: 'Er. Sandeep Verma', contactEmail: 'roads@civicconnect.org', contactPhone: '+91 80 2297 5001', zone: 'Zone 1-4', categories: ['Potholes', 'Road Resurfacing', 'Footpath Repair'] },
+  { id: 'D-2', name: 'Solid Waste Management', head: 'Dr. Kavita Nair', contactEmail: 'waste@civicconnect.org', contactPhone: '+91 80 2297 5002', zone: 'Zone 1-4', categories: ['Garbage Overflow', 'Illegal Dumping', 'Drainage Cleaning'] },
+  { id: 'D-3', name: 'Street Lighting & Electrical Works', head: 'Er. Mohammed Farooq', contactEmail: 'lighting@civicconnect.org', contactPhone: '+91 80 2297 5003', zone: 'Zone 1-4', categories: ['Streetlight Outage', 'Sparking Cable', 'Broken Pole'] },
+  { id: 'D-4', name: 'Water Supply & Sewage Board', head: 'Er. Lakshmi Narayan', contactEmail: 'water@civicconnect.org', contactPhone: '+91 80 2297 5004', zone: 'Zone 1-4', categories: ['Pipe Leakage', 'Contaminated Water', 'Low Pressure'] },
+];
