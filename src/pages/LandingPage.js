@@ -4,6 +4,7 @@ import {
   Building2,
   User,
   Shield,
+  HardHat,
   ArrowRight,
   CheckCircle2,
   MapPin,
@@ -12,6 +13,7 @@ import {
   Wrench,
   BarChart2,
   Layers,
+  Settings,
 } from 'lucide-react';
 import { useCivic } from '../context/CivicContext';
 
@@ -23,8 +25,14 @@ export function LandingPage() {
     setCurrentRole(role);
     if (role === 'citizen') {
       navigate('/citizen');
-    } else {
+    } else if (role === 'officer') {
       navigate('/officer');
+    } else if (role === 'supervisor') {
+      navigate('/supervisor');
+    } else if (role === 'admin') {
+      navigate('/admin');
+    } else {
+      navigate('/citizen');
     }
   };
 
@@ -44,31 +52,30 @@ export function LandingPage() {
             <span className="font-extrabold text-xl tracking-tight text-white flex items-center">
               Civic<span className="text-blue-400">Connect</span>
             </span>
-            <p className="text-xs text-blue-200">Urban Issue Resolution Portal</p>
+            <p className="text-xs text-blue-200">Urban Issue Resolution Platform</p>
           </div>
         </div>
 
         <div className="flex items-center space-x-2 bg-blue-500/20 text-blue-300 border border-blue-400/30 px-3 py-1 rounded-full text-xs font-semibold">
           <Sparkles className="w-3.5 h-3.5" />
-          <span>Municipal Operations & Citizen Service</span>
+          <span>Synchronized Multi-Role Portal</span>
         </div>
       </header>
 
       {/* Hero Section */}
-      <main className="max-w-6xl mx-auto w-full px-6 py-10 flex-1 flex flex-col justify-center">
-        <div className="text-center max-w-3xl mx-auto mb-12">
+      <main className="max-w-7xl mx-auto w-full px-6 py-8 flex-1 flex flex-col justify-center">
+        <div className="text-center max-w-3xl mx-auto mb-10">
           <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight text-white leading-tight mb-4">
-            Transforming Municipal Governance & Citizen Engagement
+            Transforming Municipal Governance & Civic Accountability
           </h1>
           <p className="text-slate-300 text-sm md:text-base leading-relaxed">
-            A synchronized two-tier platform bridging civic issue reporting and municipal operations.
-            Citizens report public issues with live geolocation and evidence photos; municipal officers
-            orchestrate duplicate detection, work orders, inventory, and repair verifications in real-time.
+            One unified platform connecting Citizens, Municipal Officers, Field Supervisors, and Administrators.
+            Citizen complaint &rarr; Officer work order &rarr; Field crew repair &rarr; Officer verification &rarr; Citizen feedback.
           </p>
         </div>
 
         {/* Live System Counter */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12 max-w-4xl mx-auto w-full">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10 max-w-4xl mx-auto w-full">
           <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10 text-center">
             <p className="text-2xl md:text-3xl font-extrabold text-white">{complaints.length}</p>
             <p className="text-xs text-blue-200 font-medium">Total Complaints</p>
@@ -87,66 +94,66 @@ export function LandingPage() {
           </div>
         </div>
 
-        {/* Dual Dashboard Selection Cards */}
-        <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto w-full">
-          {/* Citizen Card */}
+        {/* Multi-Dashboard Selection Cards: 4 ROLES */}
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5 max-w-7xl mx-auto w-full">
+          {/* 1. Citizen Card (Member 1) */}
           <div
             onClick={() => handleSelectRole('citizen')}
-            className="group relative bg-white/10 hover:bg-white/15 backdrop-blur-md border border-white/20 hover:border-blue-400/60 rounded-3xl p-8 transition-all duration-300 cursor-pointer shadow-xl hover:shadow-2xl flex flex-col justify-between hover:-translate-y-1"
+            className="group relative bg-white/10 hover:bg-white/15 backdrop-blur-md border border-white/20 hover:border-blue-400/60 rounded-3xl p-6 transition-all duration-300 cursor-pointer shadow-xl hover:shadow-2xl flex flex-col justify-between hover:-translate-y-1"
           >
             <div>
-              <div className="w-14 h-14 rounded-2xl bg-blue-500/20 text-blue-400 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <User className="w-8 h-8" />
+              <div className="w-12 h-12 rounded-2xl bg-blue-500/20 text-blue-400 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
+                <User className="w-6 h-6" />
               </div>
               <div className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/20 text-blue-300 border border-blue-400/30 mb-2">
                 Citizen Interface
               </div>
-              <h2 className="text-2xl font-bold text-white mb-2">
+              <h2 className="text-lg font-bold text-white mb-2">
                 Customer Dashboard
               </h2>
-              <p className="text-xs text-slate-300 mb-6 leading-relaxed">
-                Report local issues (potholes, streetlights, garbage, water leaks) with photos & location, track live progress, and provide feedback upon resolution.
+              <p className="text-xs text-slate-300 mb-5 leading-relaxed">
+                Report local issues (potholes, streetlights, garbage, water leaks) with photos & GPS, track live progress, and submit feedback.
               </p>
 
               <ul className="space-y-2 text-xs text-slate-300 mb-6">
                 <li className="flex items-center space-x-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Report civic issues with photo upload & GPS</span>
+                  <span>Report civic issues with photos & GPS</span>
                 </li>
                 <li className="flex items-center space-x-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Track complaint status timeline & updates</span>
+                  <span>Track complaint timeline & status updates</span>
                 </li>
                 <li className="flex items-center space-x-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Submit 1–5 star feedback with remarks</span>
+                  <span>Submit 1–5 star ratings upon resolution</span>
                 </li>
               </ul>
             </div>
 
-            <button className="w-full py-3 px-4 rounded-xl bg-civic-blue hover:bg-blue-600 font-semibold text-xs flex items-center justify-center space-x-2 transition-colors shadow-lg">
+            <button className="w-full py-2.5 px-4 rounded-xl bg-civic-blue hover:bg-blue-600 font-semibold text-xs flex items-center justify-center space-x-2 transition-colors shadow-lg">
               <span>Launch Citizen Dashboard</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </button>
           </div>
 
-          {/* Officer Card */}
+          {/* 2. Municipal Officer Card (Member 2) */}
           <div
             onClick={() => handleSelectRole('officer')}
-            className="group relative bg-white/10 hover:bg-white/15 backdrop-blur-md border border-white/20 hover:border-amber-400/60 rounded-3xl p-8 transition-all duration-300 cursor-pointer shadow-xl hover:shadow-2xl flex flex-col justify-between hover:-translate-y-1"
+            className="group relative bg-white/10 hover:bg-white/15 backdrop-blur-md border border-white/20 hover:border-amber-400/60 rounded-3xl p-6 transition-all duration-300 cursor-pointer shadow-xl hover:shadow-2xl flex flex-col justify-between hover:-translate-y-1"
           >
             <div>
-              <div className="w-14 h-14 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <Shield className="w-8 h-8" />
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
+                <Shield className="w-6 h-6" />
               </div>
               <div className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-400/30 mb-2">
                 Municipal Staff & Engineering
               </div>
-              <h2 className="text-2xl font-bold text-white mb-2">
+              <h2 className="text-lg font-bold text-white mb-2">
                 Municipal Officer Dashboard
               </h2>
-              <p className="text-xs text-slate-300 mb-6 leading-relaxed">
-                Review complaints, detect duplicates, dispatch work orders, manage spare parts inventory, verify field repairs, and inspect ward analytics.
+              <p className="text-xs text-slate-300 mb-5 leading-relaxed">
+                Review complaints, detect duplicates, dispatch work orders, manage central warehouse inventory, and verify field repairs.
               </p>
 
               <ul className="space-y-2 text-xs text-slate-300 mb-6">
@@ -156,17 +163,99 @@ export function LandingPage() {
                 </li>
                 <li className="flex items-center space-x-2">
                   <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>Work orders, material dispatch & inventory</span>
+                  <span>Work orders & material supply dispatch</span>
                 </li>
                 <li className="flex items-center space-x-2">
                   <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>Photo repair verification & audit history</span>
+                  <span>Photo repair quality verification & signoff</span>
                 </li>
               </ul>
             </div>
 
-            <button className="w-full py-3 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 font-semibold text-xs flex items-center justify-center space-x-2 transition-colors shadow-lg">
+            <button className="w-full py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 font-semibold text-xs flex items-center justify-center space-x-2 transition-colors shadow-lg">
               <span>Launch Officer Dashboard</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </button>
+          </div>
+
+          {/* 3. Field Supervisor Card (Member 3 - THIS MODULE) */}
+          <div
+            onClick={() => handleSelectRole('supervisor')}
+            className="group relative bg-white/10 hover:bg-white/15 backdrop-blur-md border-2 border-emerald-400/60 hover:border-emerald-400 rounded-3xl p-6 transition-all duration-300 cursor-pointer shadow-xl hover:shadow-2xl flex flex-col justify-between hover:-translate-y-1 ring-4 ring-emerald-500/10"
+          >
+            <div>
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
+                <HardHat className="w-6 h-6" />
+              </div>
+              <div className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 mb-2">
+                Field Operations (Member 3)
+              </div>
+              <h2 className="text-lg font-bold text-white mb-2">
+                Field Supervisor Dashboard
+              </h2>
+              <p className="text-xs text-slate-300 mb-5 leading-relaxed">
+                Coordinate on-site repairs, assign workers and smaller tasks, track progress %, record material usage, and upload photo evidence.
+              </p>
+
+              <ul className="space-y-2 text-xs text-slate-300 mb-6">
+                <li className="flex items-center space-x-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Worker task assignments & delay reporting</span>
+                </li>
+                <li className="flex items-center space-x-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Site material inventory & supply requests</span>
+                </li>
+                <li className="flex items-center space-x-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Before-and-after photo verification workflow</span>
+                </li>
+              </ul>
+            </div>
+
+            <button className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-semibold text-xs flex items-center justify-center space-x-2 transition-colors shadow-lg">
+              <span>Launch Supervisor Dashboard</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </button>
+          </div>
+
+          {/* 4. System Administrator Card (Member 4) */}
+          <div
+            onClick={() => handleSelectRole('admin')}
+            className="group relative bg-white/10 hover:bg-white/15 backdrop-blur-md border border-white/20 hover:border-purple-400/60 rounded-3xl p-6 transition-all duration-300 cursor-pointer shadow-xl hover:shadow-2xl flex flex-col justify-between hover:-translate-y-1"
+          >
+            <div>
+              <div className="w-12 h-12 rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
+                <Settings className="w-6 h-6" />
+              </div>
+              <div className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-500/20 text-purple-300 border border-purple-400/30 mb-2">
+                Administration & Oversight
+              </div>
+              <h2 className="text-lg font-bold text-white mb-2">
+                System Administrator
+              </h2>
+              <p className="text-xs text-slate-300 mb-5 leading-relaxed">
+                Configure user access & roles, manage municipal departments and complaint categories, inspect platform telemetry and audit logs.
+              </p>
+
+              <ul className="space-y-2 text-xs text-slate-300 mb-6">
+                <li className="flex items-center space-x-2">
+                  <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0" />
+                  <span>User & role access management across platform</span>
+                </li>
+                <li className="flex items-center space-x-2">
+                  <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0" />
+                  <span>Municipal department & category setup</span>
+                </li>
+                <li className="flex items-center space-x-2">
+                  <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0" />
+                  <span>Platform resolution rates & audit stream</span>
+                </li>
+              </ul>
+            </div>
+
+            <button className="w-full py-2.5 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 font-semibold text-xs flex items-center justify-center space-x-2 transition-colors shadow-lg">
+              <span>Launch Admin Dashboard</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </button>
           </div>
@@ -175,8 +264,8 @@ export function LandingPage() {
 
       {/* Footer */}
       <footer className="max-w-7xl mx-auto w-full px-6 py-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-400">
-        <p>© 2026 CivicConnect Platform. Citizen and Municipal Grievance Redressal.</p>
-        <p className="mt-2 sm:mt-0">Built with React, Vite, and Tailwind CSS</p>
+        <p>© 2026 CivicConnect Platform. Citizen, Officer, Field Supervisor & Administration Grievance Redressal.</p>
+        <p className="mt-2 sm:mt-0">Built with React, Vite, Tailwind CSS, Express, and MySQL</p>
       </footer>
     </div>
   );
