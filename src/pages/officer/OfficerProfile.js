@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Shield,
@@ -12,14 +12,19 @@ import {
   Info,
 } from 'lucide-react';
 import { useCivic } from '../../context/CivicContext';
+import { useAuth } from '../../context/AuthContext';
 
 export function OfficerProfile() {
   const navigate = useNavigate();
   const { officerProfile, updateOfficerProfile } = useCivic();
+  const profile = officerProfile;
+  const { logout } = useAuth();
 
   const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState(officerProfile);
+  const [formData, setFormData] = useState(profile);
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  useEffect(() => setFormData(profile), [profile]);
 
   const handleSave = (e) => {
     e.preventDefault();
@@ -50,15 +55,15 @@ export function OfficerProfile() {
       <div className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200 shadow-xs space-y-6">
         <div className="flex items-center space-x-4 pb-6 border-b border-slate-100">
           <img
-            src={officerProfile.avatarUrl}
-            alt={officerProfile.name}
+            src={profile.avatarUrl || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80'}
+            alt={profile.name}
             className="w-16 h-16 rounded-2xl object-cover ring-4 ring-blue-50"
           />
           <div>
-            <h3 className="text-lg font-bold text-slate-900">{officerProfile.name}</h3>
-            <p className="text-xs text-slate-500">{officerProfile.title}</p>
+            <h3 className="text-lg font-bold text-slate-900">{profile.name}</h3>
+            <p className="text-xs text-slate-500">{profile.title}</p>
             <span className="inline-block px-2.5 py-0.5 bg-blue-50 text-civic-blue text-[10px] font-bold rounded-md border border-blue-200 mt-1">
-              {officerProfile.department}
+              {profile.department}
             </span>
           </div>
         </div>
@@ -121,7 +126,7 @@ export function OfficerProfile() {
               <button
                 type="button"
                 onClick={() => {
-                  setFormData(officerProfile);
+                  setFormData(profile);
                   setIsEditing(false);
                 }}
                 className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold"
@@ -141,22 +146,22 @@ export function OfficerProfile() {
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
                 <span className="text-slate-400 font-medium block mb-0.5">Government Email</span>
-                <span className="font-semibold text-slate-800">{officerProfile.email}</span>
+                <span className="font-semibold text-slate-800">{profile.email}</span>
               </div>
 
               <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
                 <span className="text-slate-400 font-medium block mb-0.5">Official Wireless / Phone</span>
-                <span className="font-semibold text-slate-800">{officerProfile.phone}</span>
+                <span className="font-semibold text-slate-800">{profile.phone}</span>
               </div>
 
               <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
                 <span className="text-slate-400 font-medium block mb-0.5">Primary Department</span>
-                <span className="font-semibold text-slate-800">{officerProfile.department}</span>
+                <span className="font-semibold text-slate-800">{profile.department}</span>
               </div>
 
               <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
                 <span className="text-slate-400 font-medium block mb-0.5">Jurisdiction Coverage</span>
-                <span className="font-semibold text-slate-800">{officerProfile.wardCoverage}</span>
+                <span className="font-semibold text-slate-800">{profile.wardCoverage}</span>
               </div>
             </div>
 
@@ -169,7 +174,7 @@ export function OfficerProfile() {
               </button>
 
               <button
-                onClick={() => navigate('/')}
+                onClick={() => logout().then(() => navigate('/login', { replace: true }))}
                 className="text-rose-600 hover:text-rose-700 font-semibold text-xs flex items-center space-x-1"
               >
                 <LogOut className="w-3.5 h-3.5" />

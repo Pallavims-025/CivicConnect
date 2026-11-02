@@ -1,47 +1,139 @@
-// CivicConnect Role-Based Access Control Middleware Skeleton
-// Prepares the backend for secure authentication without trusting raw frontend role headers.
+// CivicConnect Role-Based Access Control Middleware
+// JWT-based authentication and role authorization
+
+import jwt from 'jsonwebtoken';
+import { prisma } from '../lib/prisma.js';
+
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? null : 'civicconnect_local_development_secret_change_me');
+if (!JWT_SECRET) throw new Error('JWT_SECRET must be configured in production.');
 
 export const ROLES = {
   CITIZEN: 'CITIZEN',
   OFFICER: 'OFFICER',
   SUPERVISOR: 'SUPERVISOR',
   ADMIN: 'ADMIN',
+  SUPPLIER: 'SUPPLIER',
 };
 
 /**
- * Placeholder authentication middleware.
- * When JWT / session authentication is integrated, this parses and verifies the Bearer token,
- * loads the authenticated user record from the database, and attaches req.user.
+ * Authenticate middleware.
+ * Verifies the Bearer JWT, loads the user from DB, attaches req.user.
  */
-export function authenticate(req, res, next) {
+export async function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({
       success: false,
       error: {
-        message: 'Authentication required. Authorization header missing or malformed.',
+        message: 'Authentication required. Please log in.',
         status: 401,
       },
     });
   }
 
-  // Token verification will be attached here during full auth integration.
-  // We explicitly reject unverified mock roles sent directly by clients.
-  return res.status(501).json({
-    success: false,
-    error: {
-      message: 'Token verification handler not yet activated. Auth foundation ready.',
-      status: 501,
-    },
-  });
+  const token = authHeader.slice(7); // Remove "Bearer "
+
+  let payload;
+  try {
+    payload = jwt.verify(token, JWT_SECRET);
+  } catch (err) {
+    const message =
+      err.name === 'TokenExpiredError'
+        ? 'Session expired. Please log in again.'
+        : 'Invalid authentication token.';
+    return res.status(401).json({
+      success: false,
+      error: { message, status: 401 },
+    });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        approvalStatus: true,
+        tokenVersion: true,
+        isActive: true,
+        phone: true,
+        avatarUrl: true,
+        ward: true,
+        address: true,
+        title: true,
+        departmentId: true,
+        wardCoverage: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: { message: 'User account not found.', status: 401 },
+      });
+    }
+
+    if (payload.tokenVersion !== user.tokenVersion) {
+      return res.status(401).json({
+        success: false,
+        error: { message: 'Session expired or signed out. Please log in again.', status: 401 },
+      });
+    }
+
+    if (!user.isActive) {
+      return res.status(403).json({
+        success: false,
+        error: { message: 'Account deactivated. Contact support.', status: 403 },
+      });
+    }
+
+    // Officers must be approved to access protected routes
+    if (['OFFICER', 'SUPERVISOR'].includes(user.role) && user.approvalStatus !== 'APPROVED') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          message: 'Account pending administrator approval.',
+          status: 403,
+        },
+      });
+    }
+
+    req.user = user;
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Optional authenticate — attaches req.user if valid token present, never blocks.
+ */
+export async function optionalAuthenticate(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return next();
+  }
+
+  try {
+    const token = authHeader.slice(7);
+    const payload = jwt.verify(token, JWT_SECRET);
+    const user = await prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { id: true, name: true, email: true, role: true, approvalStatus: true, isActive: true, tokenVersion: true },
+    });
+    if (user && user.isActive && payload.tokenVersion === user.tokenVersion) req.user = user;
+  } catch {
+    // ignore errors for optional auth
+  }
+  next();
 }
 
 /**
  * Role-based authorization middleware generator.
- * Restricts access to users holding one of the allowed roles.
- *
- * @param  {...string} allowedRoles Roles allowed to access the route
+ * Must be used AFTER authenticate().
  */
 export function authorize(...allowedRoles) {
   return (req, res, next) => {
@@ -49,7 +141,7 @@ export function authorize(...allowedRoles) {
       return res.status(401).json({
         success: false,
         error: {
-          message: 'User authentication required before role evaluation.',
+          message: 'Authentication required.',
           status: 401,
         },
       });
@@ -62,7 +154,7 @@ export function authorize(...allowedRoles) {
       return res.status(403).json({
         success: false,
         error: {
-          message: `Access denied. Role ${req.user.role} does not have required permissions.`,
+          message: `Access denied. Role '${req.user.role}' is not authorized for this action.`,
           status: 403,
         },
       });
