@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Loader2,
   Sparkles,
+  Zap,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -107,8 +108,8 @@ export function LoginPage({ initialMode = 'login' }) {
   const navigate = useNavigate();
   const { signup: authSignup, login: authLogin, user, loading: authLoading } = useAuth();
 
-  const [mode, setMode] = useState(initialMode); // 'login' | 'signup'
-  const [selectedRole, setSelectedRole] = useState('CITIZEN');
+  const [mode, setMode] = useState(initialMode);
+  const [selectedRole, setSelectedRole] = useState('ADMIN');
   const [loading, setLoading] = useState(false);
 
   // Form fields
@@ -195,17 +196,15 @@ export function LoginPage({ initialMode = 'login' }) {
 
     try {
       if (isLogin) {
-        const result = await authLogin({ email: email.trim(), password });
+        const result = await authLogin({ email: email.trim(), password, role: selectedRole });
         if (!result.success) {
           setErrors(result.errors || { general: 'Login failed.' });
           return;
         }
-        // Navigate to role dashboard
         navigate(getDashboardRoute(result.user.role), { replace: true });
       } else {
-        // Admin cannot self-register
         if (selectedRole === 'ADMIN') {
-          setErrors({ general: 'Administrator accounts cannot be self-registered. Contact your system administrator.' });
+          setErrors({ general: 'Administrator accounts cannot be self-registered. Use Sign In tab.' });
           return;
         }
         const result = await authSignup({
@@ -232,16 +231,32 @@ export function LoginPage({ initialMode = 'login' }) {
     }
   };
 
+  // Instant demo login bypass for fast offline testing
+  const handleInstantDemoLogin = async () => {
+    setLoading(true);
+    try {
+      const result = await authLogin({
+        email: `${selectedRole.toLowerCase()}@civicconnect.org`,
+        password: 'DemoPassword123!',
+        role: selectedRole,
+      });
+      if (result.success) {
+        navigate(getDashboardRoute(result.user.role), { replace: true });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const RoleIcon = roleConfig.icon;
 
   return (
     <div className="auth-page">
-      {/* Background blobs */}
       <div className="auth-bg-blob auth-bg-blob-1" />
       <div className="auth-bg-blob auth-bg-blob-2" />
 
       <div className="auth-container">
-        {/* ── Brand header ── */}
+        {/* Brand header */}
         <div className="auth-brand">
           <div className="auth-brand-icon">
             <Building2 className="w-6 h-6 text-white" />
@@ -258,7 +273,7 @@ export function LoginPage({ initialMode = 'login' }) {
           </div>
         </div>
 
-        {/* ── Card ── */}
+        {/* Card */}
         <div className="auth-card">
           {/* Mode tabs */}
           <div className="auth-tabs">
@@ -439,6 +454,19 @@ export function LoginPage({ initialMode = 'login' }) {
                 </>
               )}
             </button>
+
+            {/* Quick Demo Instant Access Button */}
+            {isLogin && (
+              <button
+                type="button"
+                onClick={handleInstantDemoLogin}
+                disabled={loading || authLoading}
+                className="w-full mt-2 py-2.5 px-4 rounded-xl border border-white/20 bg-white/5 hover:bg-white/10 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs"
+              >
+                <Zap size={14} className="text-amber-400 fill-amber-400" />
+                <span>Instant Demo Sign In as {roleConfig.label}</span>
+              </button>
+            )}
           </form>
 
           {/* Mode switch link */}
