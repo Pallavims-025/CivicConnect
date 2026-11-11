@@ -63,62 +63,56 @@ export function CivicProvider({ children }) {
   };
 
   // CITIZEN ACTION: Submit a new complaint
-  const submitComplaint = ({ title, categoryId, description, address, latitude, longitude, photos }) => {
-    const categoryObj = categories.find((c) => c.id === parseInt(categoryId)) || categories[0];
-    const newId = `CC-2026-${1050 + complaints.length}`;
-    const timestamp = nowString();
-
+  const submitComplaint = (record) => {
+    const timestamp = record.reportedDate || nowString();
     const newComplaint = {
-      id: newId,
-      title,
-      category: categoryObj.name,
-      categoryId: categoryObj.id,
-      description,
-      address: address || 'Location specified on map',
-      latitude: latitude ? parseFloat(latitude) : 12.9716,
-      longitude: longitude ? parseFloat(longitude) : 77.5946,
-      status: 'PENDING',
-      priority: 'MEDIUM',
+      ...record,
       reportedDate: timestamp,
-      lastUpdated: timestamp,
-      citizenId: citizenProfile.id,
-      citizenName: citizenProfile.name,
-      citizenPhone: citizenProfile.phone,
+      lastUpdated: record.lastUpdated || timestamp,
+      citizenName: record.citizenName || citizenProfile.name,
+      citizenPhone: record.citizenPhone || citizenProfile.phone,
       assignedDepartment: 'Unassigned',
       workOrderId: null,
-      photos: photos && photos.length > 0 ? photos : [
-        'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=600&auto=format&fit=crop&q=80',
-      ],
-      timeline: [
-        {
-          date: timestamp,
-          title: 'Complaint Registered',
-          description: `Citizen submitted complaint under ${categoryObj.name}.`,
-          by: citizenProfile.name,
-        },
-      ],
+      timeline: [{ date: timestamp, title: 'Complaint Registered', description: `Citizen submitted complaint under ${record.category}.`, by: citizenProfile.name }],
       feedback: null,
     };
 
-    setComplaints((prev) => [newComplaint, ...prev]);
+    setComplaints((prev) => [newComplaint, ...prev.filter((item) => item.id !== newComplaint.id)]);
 
     // Cross-dashboard sync: push notification to municipal officers
     pushNotification(
       'officer',
       'New Citizen Complaint Reported',
-      `${citizenProfile.name} submitted #${newId}: "${title}" in ${categoryObj.name}.`,
-      newId
+      `${citizenProfile.name} submitted #${newComplaint.id}: "${newComplaint.title}" in ${newComplaint.category}.`,
+      newComplaint.id
     );
 
     // Audit log
     logAudit(
       `${citizenProfile.name} (Citizen)`,
       'SUBMIT_COMPLAINT',
-      `Complaint #${newId}`,
-      `Filed new civic complaint "${title}" at ${address}.`
+      `Complaint #${newComplaint.id}`,
+      `Filed new civic complaint "${newComplaint.title}" at ${newComplaint.address}.`
     );
 
     return newComplaint;
+  };
+
+  const syncPersistedComplaints = (records = []) => {
+    setComplaints((previous) => {
+      const byId = new Map(previous.map((item) => [item.id, item]));
+      const persisted = records.map((record) => ({
+        ...byId.get(record.id),
+        ...record,
+        citizenName: record.citizenName || citizenProfile.name,
+        citizenPhone: record.citizenPhone || citizenProfile.phone,
+        timeline: byId.get(record.id)?.timeline || [],
+        photos: [...new Set([...(record.photos || []), ...(byId.get(record.id)?.photos || [])])],
+        feedback: byId.get(record.id)?.feedback || null,
+      }));
+      const persistedIds = new Set(persisted.map((item) => item.id));
+      return [...persisted, ...previous.filter((item) => !persistedIds.has(item.id))];
+    });
   };
 
   // OFFICER ACTION: Approve / classify complaint
@@ -593,6 +587,7 @@ export function CivicProvider({ children }) {
         notifications,
         auditLogs,
         submitComplaint,
+        syncPersistedComplaints,
         approveComplaint,
         rejectComplaint,
         createWorkOrder,

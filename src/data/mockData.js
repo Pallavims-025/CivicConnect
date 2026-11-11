@@ -2,13 +2,14 @@
 // All dashboard metrics, tables, and workflows derive from this shared state.
 
 export const INITIAL_CATEGORIES = [
-  { id: 1, name: 'Roads & Potholes', icon: 'Construction', color: 'orange', description: 'Surface damage, potholes, and broken asphalt' },
-  { id: 2, name: 'Garbage & Waste', icon: 'Trash2', color: 'red', description: 'Uncollected refuse, overflowing bins, and illegal dumps' },
-  { id: 3, name: 'Broken Streetlights', icon: 'Lightbulb', color: 'amber', description: 'Flickering, damaged, or unlit street fixtures' },
-  { id: 4, name: 'Water Leakage', icon: 'Droplets', color: 'blue', description: 'Burst pipelines, leaking public taps, water wastage' },
-  { id: 5, name: 'Drainage & Sewage', icon: 'Waves', color: 'purple', description: 'Clogged drains, sewage overflow, broken manhole covers' },
-  { id: 6, name: 'Public Infrastructure', icon: 'Landmark', color: 'indigo', description: 'Damaged sidewalks, bus shelters, public park benches' },
-  { id: 7, name: 'Other Civic Issues', icon: 'AlertCircle', color: 'slate', description: 'General municipal concerns not listed above' },
+  { id: 1, name: 'Road Problems', icon: 'Construction', color: 'orange', description: 'Potholes, cracked or damaged road surfaces, and other unsafe road conditions.' },
+  { id: 4, name: 'Water Supply', icon: 'Droplets', color: 'blue', description: 'Water outages, low pressure, leaks in public supply lines, and water quality concerns.' },
+  { id: 5, name: 'Drainage & Sewage', icon: 'Waves', color: 'purple', description: 'Blocked drains, sewage overflows, damaged manholes, and wastewater issues.' },
+  { id: 2, name: 'Garbage Management', icon: 'Trash2', color: 'red', description: 'Missed waste collection, overflowing public bins, and illegal dumping.' },
+  { id: 3, name: 'Streetlights', icon: 'Lightbulb', color: 'amber', description: 'Streetlights that are damaged, flickering, or not working.' },
+  { id: 6, name: 'Electricity', icon: 'Zap', color: 'yellow', description: 'Public electrical hazards, exposed wires, damaged poles, and outages affecting civic spaces.' },
+  { id: 7, name: 'Stray Animals', icon: 'PawPrint', color: 'rose', description: 'Unowned animals in public areas that need collection, care, or safety assistance.' },
+  { id: 8, name: 'Traffic & Parking', icon: 'Car', color: 'indigo', description: 'Traffic signal or signage issues, blocked streets, and unsafe or obstructive parking.' },
 ];
 
 export const INITIAL_CITIZEN = {
