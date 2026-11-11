@@ -33,6 +33,7 @@ import { ReportsAnalytics } from './pages/officer/ReportsAnalytics';
 import { OfficerNotifications } from './pages/officer/OfficerNotifications';
 import { AuditHistory } from './pages/officer/AuditHistory';
 import { OfficerProfile } from './pages/officer/OfficerProfile';
+import { getMyComplaints } from './services/api';
 
 // Admin Pages (Member 4)
 import { AdminHome } from './pages/admin/AdminHome';
@@ -99,12 +100,13 @@ function AccountPortalNotice() {
 
 export default function App() {
   const { user } = useAuth();
-  const { setCurrentRole, setCitizenProfile, setOfficerProfile } = useCivic();
+  const { setCurrentRole, setCitizenProfile, setOfficerProfile, syncPersistedComplaints } = useCivic();
   useEffect(() => {
     if (!user) return;
     const role = user.role === 'CITIZEN' ? 'citizen' : user.role === 'ADMIN' ? 'admin' : 'officer';
     setCurrentRole(role);
     if (user.role === 'CITIZEN') {
+      getMyComplaints().then(syncPersistedComplaints).catch(() => {});
       setCitizenProfile((previous) => ({
         ...previous,
         id: user.id,
@@ -129,7 +131,7 @@ export default function App() {
         avatarUrl: user.avatarUrl || '',
       }));
     }
-  }, [user?.role]);
+  }, [user?.id, user?.role]);
 
   return (
     <Routes>
