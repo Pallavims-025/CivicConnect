@@ -19,7 +19,6 @@ import {
   Building2,
   X,
   Layers,
-  Settings,
   Users,
   Camera,
   TrendingUp,
@@ -29,19 +28,20 @@ import {
   HardHat,
 } from 'lucide-react';
 import { useCivic } from '../../context/CivicContext';
+import { useAuth } from '../../context/AuthContext';
 
 export function Sidebar({ role = 'citizen', isOpen, onClose }) {
   const navigate = useNavigate();
   const {
-    complaints,
-    workOrders,
-    verifications,
-    duplicates,
-    notifications,
-    materialRequests,
+    complaints = [],
+    workOrders = [],
+    verifications = [],
+    duplicates = [],
+    notifications = [],
+    materialRequests = [],
     setCurrentRole,
-    supervisorProfile,
   } = useCivic();
+  const { logout } = useAuth();
 
   const citizenPendingCount = complaints.filter(
     (c) => c.status === 'PENDING' || c.status === 'UNDER_REVIEW'
@@ -72,48 +72,53 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
     (n) => n.role === 'supervisor' && !n.read
   ).length : 0;
 
+  // Section: Citizen Sidebar Navigation
   const citizenNav = [
-    { label: 'Dashboard', path: '/citizen', icon: LayoutDashboard },
-    { label: 'Report an Issue', path: '/citizen/report', icon: PlusCircle, badge: 'New', badgeColor: 'bg-emerald-500' },
+    { label: 'Citizen Dashboard', path: '/citizen', icon: LayoutDashboard },
+    { label: 'Report Complaint', path: '/citizen/report', icon: PlusCircle, badge: 'New', badgeColor: 'bg-emerald-500' },
     { label: 'My Complaints', path: '/citizen/complaints', icon: FileText, count: complaints.length },
     { label: 'My Feedback', path: '/citizen/feedback', icon: MessageSquare },
-    { label: 'My Profile', path: '/citizen/profile', icon: User },
+    { label: 'Profile', path: '/citizen/profile', icon: User },
     { label: 'Help & Support', path: '/citizen/help', icon: HelpCircle },
   ];
 
+  // Section: Municipal Officer Sidebar Navigation
   const officerNav = [
-    { label: 'Dashboard', path: '/officer', icon: LayoutDashboard },
-    { label: 'Complaint Management', path: '/officer/complaints', icon: FileText, count: officerPendingCount, countColor: 'bg-amber-500' },
+    { label: 'Officer Dashboard', path: '/officer', icon: LayoutDashboard },
+    { label: 'Assigned Complaints', path: '/officer/complaints', icon: FileText, count: officerPendingCount, countColor: 'bg-amber-500' },
     { label: 'Complaint Map', path: '/officer/map', icon: Map },
     { label: 'Duplicate Detection', path: '/officer/duplicates', icon: Copy, count: pendingDuplicateCount, countColor: 'bg-purple-500' },
-    { label: 'Work Orders', path: '/officer/work-orders', icon: Briefcase, count: workOrders.filter(w => w.status === 'IN_PROGRESS').length },
+    { label: 'Work Orders', path: '/officer/work-orders', icon: Briefcase, count: workOrders.filter((w) => w.status === 'IN_PROGRESS').length },
     { label: 'Materials & Inventory', path: '/officer/inventory', icon: Package },
     { label: 'Repair Verification', path: '/officer/verifications', icon: CheckCircle, count: pendingVerificationCount, countColor: 'bg-rose-500' },
     { label: 'Reports & Analytics', path: '/officer/analytics', icon: BarChart3 },
     { label: 'Notifications', path: '/officer/notifications', icon: Bell },
     { label: 'Audit History', path: '/officer/audit', icon: History },
-    { label: 'My Profile', path: '/officer/profile', icon: User },
+    { label: 'Profile', path: '/officer/profile', icon: User },
   ];
 
-  // Section 5: Field Supervisor Sidebar
+  // Section: Admin Sidebar Navigation
+  const adminNav = [
+    { label: 'Admin Dashboard', path: '/admin', icon: LayoutDashboard },
+    { label: 'User Management', path: '/admin/users', icon: Users },
+    { label: 'Department Configuration', path: '/admin/departments', icon: Building2 },
+    { label: 'System Analytics', path: '/admin/analytics', icon: BarChart3 },
+    { label: 'Audit History', path: '/admin/audit', icon: History },
+    { label: 'Profile', path: '/admin/profile', icon: User },
+  ];
+
+  // Section: Field Supervisor Sidebar Navigation
   const supervisorNav = [
-    { label: 'Dashboard', path: '/supervisor', icon: LayoutDashboard },
+    { label: 'Supervisor Dashboard', path: '/supervisor', icon: LayoutDashboard },
     { label: 'Assigned Work Orders', path: '/supervisor/work-orders', icon: Briefcase, count: supervisorActiveWOCount, countColor: 'bg-blue-500' },
     { label: 'Worker Assignments', path: '/supervisor/worker-assignments', icon: Users },
-    { label: 'Repair Progress', path: '/supervisor/repair-progress', icon: TrendingUp },
+    { label: 'Repair Progress Tracking', path: '/supervisor/repair-progress', icon: TrendingUp },
     { label: 'Photo Evidence', path: '/supervisor/photo-evidence', icon: Camera },
     { label: 'Material Inventory', path: '/supervisor/material-inventory', icon: Boxes },
     { label: 'Material Requests', path: '/supervisor/material-requests', icon: ClipboardList, count: supervisorPendingRequestsCount, countColor: 'bg-amber-500' },
     { label: 'Progress Reports', path: '/supervisor/progress-reports', icon: FileSpreadsheet },
     { label: 'Notifications', path: '/supervisor/notifications', icon: Bell, count: supervisorUnreadNotifCount, countColor: 'bg-rose-500' },
-    { label: 'My Profile', path: '/supervisor/profile', icon: User },
-  ];
-
-  const adminNav = [
-    { label: 'Dashboard', path: '/admin', icon: LayoutDashboard },
-    { label: 'User & Roles', path: '/admin/users', icon: User },
-    { label: 'Departments', path: '/admin/departments', icon: Building2 },
-    { label: 'Audit History', path: '/admin/audit', icon: History },
+    { label: 'Profile', path: '/supervisor/profile', icon: User },
   ];
 
   let items = citizenNav;
@@ -121,18 +126,20 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
   else if (role === 'supervisor') items = supervisorNav;
   else if (role === 'admin') items = adminNav;
 
-  const handleSignOut = () => {
-    navigate('/');
+  const handleRoleToggle = () => {
+    const sequence = ['citizen', 'officer', 'supervisor', 'admin'];
+    const currentIndex = sequence.indexOf(role);
+    const next = sequence[(currentIndex + 1) % sequence.length];
+    if (setCurrentRole) setCurrentRole(next);
+    navigate(`/${next}`);
   };
 
-  const handleRoleToggle = () => {
-    let next = 'citizen';
-    if (role === 'citizen') next = 'officer';
-    else if (role === 'officer') next = 'supervisor';
-    else if (role === 'supervisor') next = 'admin';
-    else if (role === 'admin') next = 'citizen';
-    setCurrentRole(next);
-    navigate(`/${next}`);
+  const handleSignOut = () => {
+    if (logout) {
+      logout().finally(() => navigate('/login', { replace: true }));
+    } else {
+      navigate('/login', { replace: true });
+    }
   };
 
   return (
@@ -167,7 +174,7 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
 
           <button
             onClick={onClose}
-            className="md:hidden p-1.5 rounded-lg text-white/70 hover:bg-white/10"
+            className="md:hidden p-1.5 rounded-lg text-white/70 hover:bg-white/10 cursor-pointer"
             aria-label="Close sidebar"
           >
             <X className="w-5 h-5" />
@@ -190,7 +197,7 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
           </span>
           <button
             onClick={handleRoleToggle}
-            className="text-[11px] text-blue-300 hover:text-white flex items-center space-x-1 font-semibold hover:underline"
+            className="text-[11px] text-blue-300 hover:text-white flex items-center space-x-1 font-semibold hover:underline cursor-pointer"
             title="Switch view"
           >
             <Layers className="w-3 h-3" />
@@ -254,10 +261,10 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
         <div className="p-3 border-t border-white/10 space-y-2">
           <button
             onClick={handleSignOut}
-            className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-rose-200 hover:bg-rose-500/20 hover:text-rose-100 transition-colors"
+            className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-rose-200 hover:bg-rose-500/20 hover:text-rose-100 transition-colors cursor-pointer"
           >
             <LogOut className="w-4 h-4 shrink-0" />
-            <span>Sign Out / Switch Mode</span>
+            <span>Sign out</span>
           </button>
         </div>
       </aside>

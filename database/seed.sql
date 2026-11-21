@@ -51,17 +51,25 @@ VALUES
 
 -- -----------------------------------------------------------------------------
 -- 2. Seed Complaint Categories
--- Reference: Matches INITIAL_CATEGORIES from src/data/mockData.js
+-- Reference: Eight public-facing civic complaint categories.
 -- -----------------------------------------------------------------------------
-INSERT IGNORE INTO `categories` (`id`, `name`, `description`, `icon`, `color`, `department_id`, `is_active`)
+INSERT INTO `categories` (`id`, `name`, `description`, `icon`, `color`, `department_id`, `is_active`)
 VALUES
-  (1, 'Roads & Potholes',      'Surface damage, potholes, and broken asphalt',                    'Construction', 'orange', 1, TRUE),
-  (2, 'Garbage & Waste',       'Uncollected refuse, overflowing bins, and illegal dumps',         'Trash2',       'red',    2, TRUE),
-  (3, 'Broken Streetlights',   'Flickering, damaged, or unlit street fixtures',                   'Lightbulb',    'amber',  3, TRUE),
-  (4, 'Water Leakage',         'Burst pipelines, leaking public taps, water wastage',              'Droplets',     'blue',   4, TRUE),
-  (5, 'Drainage & Sewage',     'Clogged drains, sewage overflow, broken manhole covers',          'Waves',        'purple', 5, TRUE),
-  (6, 'Public Infrastructure', 'Damaged sidewalks, bus shelters, public park benches',             'Landmark',     'indigo', 6, TRUE),
-  (7, 'Other Civic Issues',    'General municipal concerns not listed above',                     'AlertCircle',  'slate',  7, TRUE);
+  (1, 'Road Problems',      'Potholes, cracked or damaged road surfaces, and other unsafe road conditions.', 'Construction', 'orange', 1, TRUE),
+  (2, 'Garbage Management', 'Missed waste collection, overflowing public bins, and illegal dumping.',       'Trash2',       'red',    2, TRUE),
+  (3, 'Streetlights',       'Streetlights that are damaged, flickering, or not working.',                     'Lightbulb',    'amber',  3, TRUE),
+  (4, 'Water Supply',       'Water outages, low pressure, leaks in public supply lines, and water quality concerns.', 'Droplets', 'blue', 4, TRUE),
+  (5, 'Drainage & Sewage',  'Blocked drains, sewage overflows, damaged manholes, and wastewater issues.',      'Waves',        'purple', 5, TRUE),
+  (6, 'Electricity',        'Public electrical hazards, exposed wires, damaged poles, and outages affecting civic spaces.', 'Zap', 'yellow', 3, TRUE),
+  (7, 'Stray Animals',      'Unowned animals in public areas that need collection, care, or safety assistance.', 'PawPrint',   'rose',   7, TRUE),
+  (8, 'Traffic & Parking',  'Traffic signal or signage issues, blocked streets, and unsafe or obstructive parking.', 'Car',      'indigo', 1, TRUE)
+ON DUPLICATE KEY UPDATE
+  `name` = VALUES(`name`),
+  `description` = VALUES(`description`),
+  `icon` = VALUES(`icon`),
+  `color` = VALUES(`color`),
+  `department_id` = VALUES(`department_id`),
+  `is_active` = TRUE;
 
 -- -----------------------------------------------------------------------------
 -- 3. Seed Reference Users (Demonstration Profiles)

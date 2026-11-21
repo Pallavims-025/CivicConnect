@@ -1,52 +1,99 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Upload,
   X,
-  MapPin,
-  AlertCircle,
   CheckCircle2,
-  Image,
   Navigation,
   ArrowLeft,
 } from 'lucide-react';
 import { useCivic } from '../../context/CivicContext';
+import { createComplaint as createComplaintRequest, getComplaintCategories } from '../../services/api';
+import { PlaceAutocomplete, LocationMap, reverseGeocodeLocation } from '../../components/common/LocationMap';
 
 export function ReportIssue() {
   const navigate = useNavigate();
-  const { categories, submitComplaint } = useCivic();
+  const { submitComplaint } = useCivic();
+  const [categories, setCategories] = useState([]);
+  const [categoryStatus, setCategoryStatus] = useState('loading');
+  const [categoryRetry, setCategoryRetry] = useState(0);
 
   const [title, setTitle] = useState('');
   const [categoryId, setCategoryId] = useState('1');
   const [description, setDescription] = useState('');
   const [address, setAddress] = useState('');
-  const [latitude, setLatitude] = useState('12.9784');
-  const [longitude, setLongitude] = useState('77.6408');
-  const [photos, setPhotos] = useState([
-    'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=600&auto=format&fit=crop&q=80',
-  ]);
+  const [location, setLocation] = useState(null);
+  const [locationConfirmed, setLocationConfirmed] = useState(false);
+  const [currentLocation, setCurrentLocation] = useState(null);
+  const [focusLocation, setFocusLocation] = useState(null);
+  const [locationMessage, setLocationMessage] = useState('Click the map to choose the issue location, or use GPS.');
+  const addressRequestRef = useRef(0);
+  const [photos, setPhotos] = useState([]);
   const [photoInputUrl, setPhotoInputUrl] = useState('');
   const [errors, setErrors] = useState({});
   const [submittedData, setSubmittedData] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setCategoryStatus('loading');
+    getComplaintCategories().then((items) => {
+      if (!active) return;
+      const available = Array.isArray(items) ? items : [];
+      setCategories(available);
+      setCategoryId(available.length ? String(available[0].id) : '');
+      setCategoryStatus(available.length ? 'loaded' : 'empty');
+      setErrors((previous) => ({ ...previous, categoryId: undefined }));
+    }).catch(() => {
+      if (!active) return;
+      setCategories([]);
+      setCategoryId('');
+      setCategoryStatus('error');
+    });
+    return () => { active = false; };
+  }, [categoryRetry]);
+
+  const selectPoint = (lat, lng, source = 'map', accuracy = null) => {
+    const point = { lat, lng, accuracy, source };
+    const requestId = ++addressRequestRef.current;
+    setLocation(point);
+    setFocusLocation(null);
+    setLocationConfirmed(false);
+    setAddress('');
+    setLocationMessage(source === 'gps'
+      ? `GPS position selected${Number.isFinite(accuracy) ? ` (reported accuracy ±${Math.round(accuracy)} m)` : ''}. Adjust the marker if needed; the GPS reading is an estimate.`
+      : 'Selected map coordinates. Looking up the nearest address…');
+    setErrors((previous) => ({ ...previous, location: undefined }));
+    reverseGeocodeLocation([lat, lng]).then((formattedAddress) => {
+      if (requestId !== addressRequestRef.current) return;
+      if (formattedAddress) {
+        setAddress(formattedAddress);
+        if (source !== 'gps') setLocationMessage('Nearest address found for the selected coordinates. Confirm the point when it is accurate.');
+      } else if (source !== 'gps') setLocationMessage('No address was returned for this point. You can enter a landmark manually.');
+    }).catch(() => {
+      if (requestId === addressRequestRef.current && source !== 'gps') setLocationMessage('Address lookup failed. You can enter the landmark manually.');
+    });
+  };
 
   const handleGetLocation = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          setLatitude(position.coords.latitude.toFixed(4));
-          setLongitude(position.coords.longitude.toFixed(4));
-          if (!address) {
-            setAddress(`GPS Coord: ${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)}`);
-          }
+          const point = { lat: position.coords.latitude, lng: position.coords.longitude, accuracy: position.coords.accuracy };
+          setCurrentLocation(point);
+          selectPoint(point.lat, point.lng, 'gps', point.accuracy);
         },
-        () => {
-          // Fallback location for demo
-          setLatitude('12.9716');
-          setLongitude('77.5946');
-          if (!address) setAddress('Bangalore Central Zone, MG Road');
-        }
+        (error) => setLocationMessage(error.code === 1
+          ? 'Location permission was denied. You can still choose a location by clicking the map.'
+          : 'Current location is unavailable. You can choose a location by clicking the map.'),
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
       );
-    }
+    } else setLocationMessage('This browser does not support GPS. Choose a location by clicking the map.');
+  };
+
+  const handlePlaceSearch = (place) => {
+    setFocusLocation({ lat: place.lat, lng: place.lng });
+    setLocationMessage(`Map centered on ${place.address || 'the search result'}. Search results are approximate places; click or drag to choose the exact issue point.`);
   };
 
   const handleAddPhotoUrl = () => {
@@ -75,7 +122,7 @@ export function ReportIssue() {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const newErrors = {};
 
@@ -88,6 +135,7 @@ export function ReportIssue() {
     else if (description.trim().length < 15) newErrors.description = 'Please provide at least 15 characters describing the issue.';
 
     if (!address.trim()) newErrors.address = 'Location address or landmark is required.';
+    if (!location || !locationConfirmed || !Number.isFinite(location.lat) || !Number.isFinite(location.lng)) newErrors.location = 'Choose and confirm a complaint location on the map.';
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -96,17 +144,20 @@ export function ReportIssue() {
 
     setErrors({});
 
-    const newComplaint = submitComplaint({
-      title,
-      categoryId,
-      description,
-      address,
-      latitude,
-      longitude,
-      photos,
-    });
-
-    setSubmittedData(newComplaint);
+    setSubmitting(true);
+    try {
+      const record = await createComplaintRequest({
+        title, categoryId: Number(categoryId), description, address,
+        latitude: location.lat, longitude: location.lng,
+        photos: photos.filter((photo) => typeof photo === 'string' && photo.length <= 1000 && /^https?:\/\//i.test(photo)),
+      });
+      const newComplaint = submitComplaint({ ...record, photos });
+      setSubmittedData(newComplaint);
+    } catch (error) {
+      setErrors(error.details && Object.keys(error.details).length ? error.details : { submit: error.message });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (submittedData) {
@@ -115,8 +166,8 @@ export function ReportIssue() {
         <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-4">
           <CheckCircle2 className="w-10 h-10" />
         </div>
-        <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 mb-2">
-          Demonstration Complaint Registered
+          <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 mb-2">
+            Complaint Registered
         </span>
         <h2 className="text-2xl font-extrabold text-civic-text mb-2">
           Complaint Successfully Lodged!
@@ -212,16 +263,22 @@ export function ReportIssue() {
             Category <span className="text-rose-500">*</span>
           </label>
           <select
+            disabled={categoryStatus !== 'loaded'}
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
             className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-civic-blue outline-hidden transition-all bg-white"
           >
-            {categories.map((cat) => (
+            {categoryStatus === 'loading' && <option value="">Loading categories...</option>}
+            {categoryStatus === 'empty' && <option value="">No categories available. Please contact the administrator.</option>}
+            {categoryStatus === 'error' && <option value="">Failed to load categories. Please try again.</option>}
+            {categoryStatus === 'loaded' && categories.map((cat) => (
               <option key={cat.id} value={cat.id}>
-                {cat.name} — {cat.description}
+                {cat.name}{cat.description ? ` — ${cat.description}` : ''}
               </option>
             ))}
           </select>
+          {categoryStatus === 'error' && <button type="button" onClick={() => setCategoryRetry((attempt) => attempt + 1)} className="mt-1 text-[11px] font-semibold text-civic-blue underline">Try again</button>}
+          {categoryStatus === 'loaded' && errors.categoryId && <p className="text-[11px] text-rose-500 mt-1">{errors.categoryId}</p>}
         </div>
 
         {/* Description */}
@@ -269,31 +326,16 @@ export function ReportIssue() {
             {errors.address && <p className="text-[11px] text-rose-500 mt-1 font-medium">{errors.address}</p>}
           </div>
 
-          <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
-            <div>
-              <label className="block text-[11px] font-medium text-slate-500 mb-1">
-                Latitude (Optional)
-              </label>
-              <input
-                type="text"
-                value={latitude}
-                onChange={(e) => setLatitude(e.target.value)}
-                placeholder="12.9716"
-                className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-xs bg-white"
-              />
+          <div className="rounded-2xl border border-slate-200 p-3 space-y-3">
+            <PlaceAutocomplete onPlaceSelected={handlePlaceSearch} />
+            <LocationMap center={[20, 0]} zoom={2} focusLocation={focusLocation} selected={location} currentLocation={currentLocation} onSelect={(point) => selectPoint(point[0], point[1], 'map')} className="h-[340px] sm:h-[400px]" />
+            <p className="text-[11px] text-slate-500">Search moves the map to a place; it does not set your complaint location. Click the exact point or drag the marker there.</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px]">
+              <span className={errors.location ? 'text-rose-600 font-semibold' : 'text-slate-500'}>{errors.location || locationMessage}</span>
+              {location && <span className="font-mono text-slate-700">{location.lat.toFixed(7)}, {location.lng.toFixed(7)} {locationConfirmed ? '· confirmed' : '· not confirmed'}</span>}
             </div>
-            <div>
-              <label className="block text-[11px] font-medium text-slate-500 mb-1">
-                Longitude (Optional)
-              </label>
-              <input
-                type="text"
-                value={longitude}
-                onChange={(e) => setLongitude(e.target.value)}
-                placeholder="77.5946"
-                className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-xs bg-white"
-              />
-            </div>
+            {currentLocation && Number.isFinite(currentLocation.accuracy) && <p className="text-[11px] text-blue-700">Device-reported GPS accuracy: ±{Math.round(currentLocation.accuracy)} m. The GPS point is an estimate; map clicks and marker movement set the final coordinates.</p>}
+            {location && <button type="button" onClick={() => { setLocationConfirmed(true); setLocationMessage('Location confirmed.'); setErrors((previous) => ({ ...previous, location: undefined })); }} className="px-3 py-1.5 bg-blue-50 text-civic-blue rounded-lg text-[11px] font-bold">{locationConfirmed ? 'Location confirmed' : 'Confirm selected location'}</button>}
           </div>
         </div>
 
@@ -358,11 +400,13 @@ export function ReportIssue() {
           >
             Cancel
           </button>
+          {errors.submit && <p className="mr-auto text-[11px] text-rose-600">{errors.submit}</p>}
           <button
             type="submit"
-            className="px-6 py-2.5 rounded-xl text-xs font-bold bg-civic-blue hover:bg-blue-700 text-white transition-colors shadow-md flex items-center space-x-2"
+            disabled={submitting || !categories.length}
+            className="px-6 py-2.5 rounded-xl text-xs font-bold bg-civic-blue hover:bg-blue-700 text-white transition-colors shadow-md flex items-center space-x-2 disabled:opacity-60"
           >
-            <span>Submit Complaint</span>
+            <span>{submitting ? 'Submitting…' : 'Submit Complaint'}</span>
           </button>
         </div>
       </form>

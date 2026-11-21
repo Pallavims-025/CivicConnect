@@ -2,13 +2,14 @@
 // All dashboard metrics, tables, and workflows derive from this shared state.
 
 export const INITIAL_CATEGORIES = [
-  { id: 1, name: 'Roads & Potholes', icon: 'Construction', color: 'orange', description: 'Surface damage, potholes, and broken asphalt' },
-  { id: 2, name: 'Garbage & Waste', icon: 'Trash2', color: 'red', description: 'Uncollected refuse, overflowing bins, and illegal dumps' },
-  { id: 3, name: 'Broken Streetlights', icon: 'Lightbulb', color: 'amber', description: 'Flickering, damaged, or unlit street fixtures' },
-  { id: 4, name: 'Water Leakage', icon: 'Droplets', color: 'blue', description: 'Burst pipelines, leaking public taps, water wastage' },
-  { id: 5, name: 'Drainage & Sewage', icon: 'Waves', color: 'purple', description: 'Clogged drains, sewage overflow, broken manhole covers' },
-  { id: 6, name: 'Public Infrastructure', icon: 'Landmark', color: 'indigo', description: 'Damaged sidewalks, bus shelters, public park benches' },
-  { id: 7, name: 'Other Civic Issues', icon: 'AlertCircle', color: 'slate', description: 'General municipal concerns not listed above' },
+  { id: 1, name: 'Road Problems', icon: 'Construction', color: 'orange', description: 'Potholes, cracked or damaged road surfaces, and other unsafe road conditions.' },
+  { id: 4, name: 'Water Supply', icon: 'Droplets', color: 'blue', description: 'Water outages, low pressure, leaks in public supply lines, and water quality concerns.' },
+  { id: 5, name: 'Drainage & Sewage', icon: 'Waves', color: 'purple', description: 'Blocked drains, sewage overflows, damaged manholes, and wastewater issues.' },
+  { id: 2, name: 'Garbage Management', icon: 'Trash2', color: 'red', description: 'Missed waste collection, overflowing public bins, and illegal dumping.' },
+  { id: 3, name: 'Streetlights', icon: 'Lightbulb', color: 'amber', description: 'Streetlights that are damaged, flickering, or not working.' },
+  { id: 6, name: 'Electricity', icon: 'Zap', color: 'yellow', description: 'Public electrical hazards, exposed wires, damaged poles, and outages affecting civic spaces.' },
+  { id: 7, name: 'Stray Animals', icon: 'PawPrint', color: 'rose', description: 'Unowned animals in public areas that need collection, care, or safety assistance.' },
+  { id: 8, name: 'Traffic & Parking', icon: 'Car', color: 'indigo', description: 'Traffic signal or signage issues, blocked streets, and unsafe or obstructive parking.' },
 ];
 
 export const INITIAL_CITIZEN = {
@@ -1047,4 +1048,19 @@ export const INITIAL_AUDIT_LOGS = [
     timestamp: '2026-10-10 10:00:15',
     details: 'Submitted 5-star resolution rating: "Very fast response! The entire corner was cleared..."',
   },
+];
+
+
+export const INITIAL_USERS = [
+  { id: 'USR-01', name: 'Dr. Aruna Rao', email: 'aruna.rao@municipal.gov', role: 'officer', dept: 'Public Works', status: 'ACTIVE', phone: '+91 94480 22334', joinedDate: '2026-01-10' },
+  { id: 'USR-02', name: 'Rajesh Kumar', email: 'rajesh.k@field.gov', role: 'supervisor', dept: 'Zone 4 Operations', status: 'ACTIVE', phone: '+91 94480 11223', joinedDate: '2026-01-12' },
+  { id: 'USR-03', name: 'Priya Sharma', email: 'priya.s@gmail.com', role: 'citizen', dept: 'N/A', status: 'ACTIVE', phone: '+91 98765 43210', joinedDate: '2026-01-15' },
+  { id: 'USR-04', name: 'Santosh (Admin)', email: 'admin@civicconnect.org', role: 'admin', dept: 'IT & Governance', status: 'ACTIVE', phone: '+91 91234 56789', joinedDate: '2026-01-01' },
+];
+
+export const INITIAL_DEPARTMENTS = [
+  { id: 'D-1', name: 'Road Infrastructure & Maintenance', head: 'Er. Sandeep Verma', contactEmail: 'roads@civicconnect.org', contactPhone: '+91 80 2297 5001', zone: 'Zone 1-4', categories: ['Potholes', 'Road Resurfacing', 'Footpath Repair'] },
+  { id: 'D-2', name: 'Solid Waste Management', head: 'Dr. Kavita Nair', contactEmail: 'waste@civicconnect.org', contactPhone: '+91 80 2297 5002', zone: 'Zone 1-4', categories: ['Garbage Overflow', 'Illegal Dumping', 'Drainage Cleaning'] },
+  { id: 'D-3', name: 'Street Lighting & Electrical Works', head: 'Er. Mohammed Farooq', contactEmail: 'lighting@civicconnect.org', contactPhone: '+91 80 2297 5003', zone: 'Zone 1-4', categories: ['Streetlight Outage', 'Sparking Cable', 'Broken Pole'] },
+  { id: 'D-4', name: 'Water Supply & Sewage Board', head: 'Er. Lakshmi Narayan', contactEmail: 'water@civicconnect.org', contactPhone: '+91 80 2297 5004', zone: 'Zone 1-4', categories: ['Pipe Leakage', 'Contaminated Water', 'Low Pressure'] },
 ];

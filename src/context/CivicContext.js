@@ -17,6 +17,8 @@ import {
   INITIAL_DUPLICATES,
   INITIAL_NOTIFICATIONS,
   INITIAL_AUDIT_LOGS,
+  INITIAL_USERS,
+  INITIAL_DEPARTMENTS,
 } from '../data/mockData';
 
 const CivicContext = createContext();
@@ -37,6 +39,8 @@ export function CivicProvider({ children }) {
   const [duplicates, setDuplicates] = useState(INITIAL_DUPLICATES);
   const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
   const [auditLogs, setAuditLogs] = useState(INITIAL_AUDIT_LOGS);
+  const [users, setUsers] = useState(INITIAL_USERS);
+  const [departments, setDepartments] = useState(INITIAL_DEPARTMENTS);
 
   // Field Supervisor Specific Reactive States (Member 3)
   const [workers, setWorkers] = useState(INITIAL_WORKERS);
@@ -78,54 +82,50 @@ export function CivicProvider({ children }) {
     setNotifications((prev) => [newNotif, ...prev]);
   };
 
+
   // ==========================================
   // CITIZEN ACTIONS (Member 1)
   // ==========================================
-  const submitComplaint = ({ title, categoryId, description, address, latitude, longitude, photos }) => {
-    const categoryObj = categories.find((c) => c.id === parseInt(categoryId)) || categories[0];
-    const newId = `CC-2026-${1050 + complaints.length}`;
-    const timestamp = nowString();
+  const submitComplaint = (record) => {
+    const categoryObj = categories.find(
+      (c) => c.id === parseInt(record.categoryId)
+    ) || categories[0];
+
+    const newId = record.id || `CC-2026-${1050 + complaints.length}`;
+    const timestamp = record.reportedDate || nowString();
 
     const newComplaint = {
+      ...record,
       id: newId,
-      title,
-      category: categoryObj.name,
-      categoryId: categoryObj.id,
-      description,
-      address: address || 'Location specified on map',
-      latitude: latitude ? parseFloat(latitude) : 12.9716,
-      longitude: longitude ? parseFloat(longitude) : 77.5946,
-      status: 'PENDING',
-      priority: 'MEDIUM',
       reportedDate: timestamp,
-      lastUpdated: timestamp,
-      citizenId: citizenProfile.id,
-      citizenName: citizenProfile.name,
-      citizenPhone: citizenProfile.phone,
-      assignedDepartment: 'Unassigned',
-      workOrderId: null,
-      photos: photos && photos.length > 0 ? photos : [
-        'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=600&auto=format&fit=crop&q=80',
-      ],
-      timeline: [
+      lastUpdated: record.lastUpdated || timestamp,
+      category: record.category || categoryObj?.name || 'Other',
+      citizenName: record.citizenName || citizenProfile.name,
+      citizenPhone: record.citizenPhone || citizenProfile.phone,
+      assignedDepartment: record.assignedDepartment || 'Unassigned',
+      workOrderId: record.workOrderId || null,
+      timeline: record.timeline || [
         {
           date: timestamp,
           title: 'Complaint Registered',
-          description: `Citizen submitted complaint under ${categoryObj.name}.`,
+          description: `Citizen submitted complaint under ${record.category || categoryObj?.name || 'Other'}.`,
           by: citizenProfile.name,
         },
       ],
-      feedback: null,
+      feedback: record.feedback || null,
     };
 
-    setComplaints((prev) => [newComplaint, ...prev]);
+    setComplaints((prev) => [
+      newComplaint,
+      ...prev.filter((item) => item.id !== newComplaint.id),
+    ]);
 
     // Cross-dashboard sync: push notification to municipal officers
     pushNotification(
       'officer',
       'New Citizen Complaint Reported',
-      `${citizenProfile.name} submitted #${newId}: "${title}" in ${categoryObj.name}.`,
-      newId,
+      `${citizenProfile.name} submitted #${newComplaint.id}: "${newComplaint.title}" in ${newComplaint.category}.`,
+      newComplaint.id,
       'COMPLAINT'
     );
 
@@ -133,8 +133,8 @@ export function CivicProvider({ children }) {
     logAudit(
       `${citizenProfile.name} (Citizen)`,
       'SUBMIT_COMPLAINT',
-      `Complaint #${newId}`,
-      `Filed new civic complaint "${title}" at ${address}.`
+      `Complaint #${newComplaint.id}`,
+      `Filed new civic complaint "${newComplaint.title}" at ${newComplaint.address}.`
     );
 
     return newComplaint;
@@ -142,6 +142,7 @@ export function CivicProvider({ children }) {
 
   const submitFeedback = (complaintId, rating, comment) => {
     const timestamp = nowString();
+
     setComplaints((prev) =>
       prev.map((c) => {
         if (c.id === complaintId) {
@@ -174,9 +175,40 @@ export function CivicProvider({ children }) {
     );
   };
 
+  const syncPersistedComplaints = (records = []) => {
+    setComplaints((previous) => {
+      const byId = new Map(previous.map((item) => [item.id, item]));
+
+      const persisted = records.map((record) => ({
+        ...byId.get(record.id),
+        ...record,
+        citizenName: record.citizenName || citizenProfile.name,
+        citizenPhone: record.citizenPhone || citizenProfile.phone,
+        timeline: byId.get(record.id)?.timeline || [],
+        photos: [
+          ...new Set([
+            ...(record.photos || []),
+            ...(byId.get(record.id)?.photos || []),
+          ]),
+        ],
+        feedback: byId.get(record.id)?.feedback || null,
+      }));
+
+      const persistedIds = new Set(persisted.map((item) => item.id));
+
+      return [
+        ...persisted,
+        ...previous.filter((item) => !persistedIds.has(item.id)),
+      ];
+    });
+  };
+
+
   // ==========================================
   // MUNICIPAL OFFICER ACTIONS (Member 2)
   // ==========================================
+  // OFFICER ACTION: Approve / classify complaint
+
   const approveComplaint = (complaintId, department, priority) => {
     const timestamp = nowString();
     setComplaints((prev) =>
@@ -1297,6 +1329,135 @@ export function CivicProvider({ children }) {
     logAudit(`${officerProfile.name} (Officer)`, 'UPDATE_PROFILE', 'Officer Account', 'Updated officer contact details.');
   };
 
+  // ADMIN ACTIONS (Member 4)
+  const addUser = ({ name, email, role, dept, status, phone }) => {
+    const newId = `USR-${(users.length + 1).toString().padStart(2, '0')}`;
+    const newUser = {
+      id: newId,
+      name,
+      email,
+      role: (role || 'citizen').toLowerCase(),
+      dept: dept || ((role || '').toLowerCase() === 'citizen' ? 'N/A' : 'General Operations'),
+      status: status || 'ACTIVE',
+      phone: phone || '',
+      joinedDate: nowString().split(' ')[0],
+    };
+    setUsers((prev) => [newUser, ...prev]);
+    logAudit(
+      'Santosh (Admin)',
+      'CREATE_USER',
+      `User ${newUser.name} (${newId})`,
+      `Created ${newUser.role.toUpperCase()} account assigned to ${newUser.dept}.`
+    );
+    return newUser;
+  };
+
+  const updateUser = (userId, updatedFields) => {
+    setUsers((prev) =>
+      prev.map((u) => (u.id === userId ? { ...u, ...updatedFields } : u))
+    );
+    const target = users.find((u) => u.id === userId);
+    logAudit(
+      'Santosh (Admin)',
+      'UPDATE_USER',
+      `User #${userId}`,
+      `Updated user settings for ${target ? target.name : userId}.`
+    );
+  };
+
+  const deleteUser = (userId) => {
+    const target = users.find((u) => u.id === userId);
+    setUsers((prev) => prev.filter((u) => u.id !== userId));
+    logAudit(
+      'Santosh (Admin)',
+      'DELETE_USER',
+      `User #${userId}`,
+      `Removed user account for ${target ? target.name : userId}.`
+    );
+  };
+
+  const addDepartment = ({ name, head, contactEmail, contactPhone, zone, categories }) => {
+    const newId = `D-${departments.length + 1}`;
+    const newDept = {
+      id: newId,
+      name,
+      head: head || 'Assigned Officer',
+      contactEmail: contactEmail || `${name.toLowerCase().replace(/[^a-z0-9]/g, '')}@civicconnect.org`,
+      contactPhone: contactPhone || '+91 80 2297 5000',
+      zone: zone || 'Zone 1-4',
+      categories: categories && categories.length > 0 ? categories : ['General Civic Work'],
+    };
+    setDepartments((prev) => [...prev, newDept]);
+    logAudit(
+      'Santosh (Admin)',
+      'CREATE_DEPARTMENT',
+      `Department ${name} (${newId})`,
+      `Created department under leadership of ${newDept.head}.`
+    );
+    return newDept;
+  };
+
+  const updateDepartment = (deptId, updatedFields) => {
+    setDepartments((prev) =>
+      prev.map((d) => (d.id === deptId ? { ...d, ...updatedFields } : d))
+    );
+    const target = departments.find((d) => d.id === deptId);
+    logAudit(
+      'Santosh (Admin)',
+      'UPDATE_DEPARTMENT',
+      `Department #${deptId}`,
+      `Updated parameters for ${target ? target.name : deptId}.`
+    );
+  };
+
+  const deleteDepartment = (deptId) => {
+    const target = departments.find((d) => d.id === deptId);
+    setDepartments((prev) => prev.filter((d) => d.id !== deptId));
+    logAudit(
+      'Santosh (Admin)',
+      'DELETE_DEPARTMENT',
+      `Department #${deptId}`,
+      `Removed municipal department ${target ? target.name : deptId}.`
+    );
+  };
+
+  const addCategoryToDepartment = (deptId, categoryName) => {
+    const trimmed = (categoryName || '').trim();
+    if (!trimmed) return;
+    setDepartments((prev) =>
+      prev.map((d) => {
+        if (d.id === deptId) {
+          if (d.categories.includes(trimmed)) return d;
+          return { ...d, categories: [...d.categories, trimmed] };
+        }
+        return d;
+      })
+    );
+    logAudit(
+      'Santosh (Admin)',
+      'ADD_DEPT_CATEGORY',
+      `Department #${deptId}`,
+      `Added category "${trimmed}".`
+    );
+  };
+
+  const removeCategoryFromDepartment = (deptId, categoryName) => {
+    setDepartments((prev) =>
+      prev.map((d) => {
+        if (d.id === deptId) {
+          return { ...d, categories: d.categories.filter((c) => c !== categoryName) };
+        }
+        return d;
+      })
+    );
+    logAudit(
+      'Santosh (Admin)',
+      'REMOVE_DEPT_CATEGORY',
+      `Department #${deptId}`,
+      `Removed category "${categoryName}".`
+    );
+  };
+
   return (
     <CivicContext.Provider
       value={{
@@ -1304,8 +1465,11 @@ export function CivicProvider({ children }) {
         currentRole,
         setCurrentRole,
         citizenProfile,
+        setCitizenProfile,
         officerProfile,
         supervisorProfile,
+        setSupervisorProfile,
+        setOfficerProfile,
         categories,
         complaints,
         workOrders,
@@ -1325,6 +1489,7 @@ export function CivicProvider({ children }) {
         submitComplaint,
         submitFeedback,
         updateCitizenProfile,
+        syncPersistedComplaints,
         // Officer actions
         approveComplaint,
         rejectComplaint,
@@ -1354,6 +1519,16 @@ export function CivicProvider({ children }) {
         // Notification actions
         markNotificationRead,
         markAllNotificationsRead,
+        users,
+        departments,
+        addUser,
+        updateUser,
+        deleteUser,
+        addDepartment,
+        updateDepartment,
+        deleteDepartment,
+        addCategoryToDepartment,
+        removeCategoryFromDepartment,
       }}
     >
       {children}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   Bell,
   CheckCircle2,
@@ -8,12 +8,12 @@ import {
   Shield,
   Layers,
   ChevronDown,
-  ExternalLink,
   Menu,
   HardHat,
   Settings,
 } from 'lucide-react';
 import { useCivic } from '../../context/CivicContext';
+import { useAuth } from '../../context/AuthContext';
 
 export function Header({ title, onToggleMobileSidebar }) {
   const {
@@ -26,13 +26,13 @@ export function Header({ title, onToggleMobileSidebar }) {
     markNotificationRead,
     markAllNotificationsRead,
   } = useCivic();
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showRoleMenu, setShowRoleMenu] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
 
-  const relevantNotifications = notifications.filter(
+  const relevantNotifications = (notifications || []).filter(
     (n) => n.role === currentRole
   );
   const unreadCount = relevantNotifications.filter((n) => !n.read).length;
@@ -65,12 +65,31 @@ export function Header({ title, onToggleMobileSidebar }) {
     portalSubtitle = 'Field Operations & Supervision';
   } else if (currentRole === 'admin') {
     activeUser = {
-      name: 'Super Admin',
-      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-      title: 'Administrator',
+      name: user?.name || 'Super Admin',
+      avatarUrl: user?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+      title: user?.title || 'System Administrator',
+      department: 'IT Administration',
     };
     roleDisplayName = 'Admin';
     portalSubtitle = 'System Administration';
+  }
+
+  // If user object from auth is present and matches current role, overlay profile details
+  if (user) {
+    const roleMatches =
+      (user.role === 'CITIZEN' && currentRole === 'citizen') ||
+      (user.role === 'OFFICER' && currentRole === 'officer') ||
+      (user.role === 'SUPERVISOR' && currentRole === 'supervisor') ||
+      (user.role === 'ADMIN' && currentRole === 'admin');
+    if (roleMatches) {
+      activeUser = {
+        ...activeUser,
+        name: user.name || activeUser?.name,
+        email: user.email || activeUser?.email,
+        avatarUrl: user.avatarUrl || activeUser?.avatarUrl,
+        department: user.department?.name || user.department || activeUser?.department,
+      };
+    }
   }
 
   return (
@@ -105,7 +124,7 @@ export function Header({ title, onToggleMobileSidebar }) {
         <div className="relative">
           <button
             onClick={() => setShowRoleMenu(!showRoleMenu)}
-            className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors border border-slate-300 shadow-xs"
+            className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors border border-slate-300 shadow-xs cursor-pointer"
             title="Switch between Citizen, Officer, Supervisor, and Admin view"
           >
             <Layers className="w-3.5 h-3.5 text-civic-blue" />
@@ -124,7 +143,7 @@ export function Header({ title, onToggleMobileSidebar }) {
 
               <button
                 onClick={() => handleRoleSwitch('citizen')}
-                className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-slate-50 ${
+                className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer ${
                   currentRole === 'citizen' ? 'bg-blue-50/70 font-semibold text-civic-blue' : 'text-slate-700'
                 }`}
               >
@@ -132,7 +151,7 @@ export function Header({ title, onToggleMobileSidebar }) {
                   <User className="w-4 h-4 text-blue-600" />
                   <div>
                     <p className="font-semibold text-slate-900">Citizen Dashboard</p>
-                    <p className="text-[11px] text-slate-400">Report & track civic issues</p>
+                    <p className="text-[11px] text-slate-400">Public grievance reporting & tracking</p>
                   </div>
                 </div>
                 {currentRole === 'citizen' && <span className="w-2 h-2 rounded-full bg-civic-blue"></span>}
@@ -140,15 +159,15 @@ export function Header({ title, onToggleMobileSidebar }) {
 
               <button
                 onClick={() => handleRoleSwitch('officer')}
-                className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-slate-50 ${
+                className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer ${
                   currentRole === 'officer' ? 'bg-blue-50/70 font-semibold text-civic-blue' : 'text-slate-700'
                 }`}
               >
                 <div className="flex items-center space-x-2.5">
                   <Shield className="w-4 h-4 text-amber-600" />
                   <div>
-                    <p className="font-semibold text-slate-900">Municipal Officer Dashboard</p>
-                    <p className="text-[11px] text-slate-400">Triage, work orders, verification</p>
+                    <p className="font-semibold text-slate-900">Municipal Operations Staff</p>
+                    <p className="text-[11px] text-slate-400">Verification, triage, assignment</p>
                   </div>
                 </div>
                 {currentRole === 'officer' && <span className="w-2 h-2 rounded-full bg-civic-blue"></span>}
@@ -156,12 +175,12 @@ export function Header({ title, onToggleMobileSidebar }) {
 
               <button
                 onClick={() => handleRoleSwitch('supervisor')}
-                className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-slate-50 ${
+                className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer ${
                   currentRole === 'supervisor' ? 'bg-blue-50/70 font-semibold text-civic-blue' : 'text-slate-700'
                 }`}
               >
                 <div className="flex items-center space-x-2.5">
-                  <HardHat className="w-4 h-4 text-emerald-600" />
+                  <HardHat className="w-4 h-4 text-amber-500" />
                   <div>
                     <p className="font-semibold text-slate-900">Field Supervisor Dashboard</p>
                     <p className="text-[11px] text-slate-400">Crew, repair progress, materials, photos</p>
@@ -172,7 +191,7 @@ export function Header({ title, onToggleMobileSidebar }) {
 
               <button
                 onClick={() => handleRoleSwitch('admin')}
-                className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-slate-50 ${
+                className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer ${
                   currentRole === 'admin' ? 'bg-blue-50/70 font-semibold text-civic-blue' : 'text-slate-700'
                 }`}
               >
@@ -193,7 +212,7 @@ export function Header({ title, onToggleMobileSidebar }) {
         <div className="relative">
           <button
             onClick={() => setShowNotifications(!showNotifications)}
-            className="relative p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors focus:outline-hidden"
+            className="relative p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors focus:outline-hidden cursor-pointer"
             aria-label="View notifications"
           >
             <Bell className="w-5 h-5" />
@@ -210,7 +229,7 @@ export function Header({ title, onToggleMobileSidebar }) {
                 <div className="flex items-center space-x-1.5">
                   <span className="font-bold text-sm text-slate-800">Notifications</span>
                   {unreadCount > 0 && (
-                    <span className="px-1.5 py-0.2 bg-blue-100 text-blue-800 text-[10px] font-bold rounded-full">
+                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-bold rounded-full">
                       {unreadCount} new
                     </span>
                   )}
@@ -218,7 +237,7 @@ export function Header({ title, onToggleMobileSidebar }) {
                 {unreadCount > 0 && (
                   <button
                     onClick={markAllNotificationsRead}
-                    className="text-xs text-civic-blue hover:underline font-medium"
+                    className="text-xs text-civic-blue hover:underline font-medium cursor-pointer"
                   >
                     Mark all read
                   </button>
@@ -242,7 +261,7 @@ export function Header({ title, onToggleMobileSidebar }) {
                       <div className="flex items-start justify-between">
                         <p className="font-semibold text-slate-800">{n.title}</p>
                         <span className="text-[10px] text-slate-400 whitespace-nowrap ml-2">
-                          {n.timestamp ? n.timestamp.split(' ')[1] : ''}
+                          {n.timestamp ? (n.timestamp.includes(' ') ? n.timestamp.split(' ')[1] : n.timestamp) : ''}
                         </span>
                       </div>
                       <p className="text-slate-600 mt-0.5 line-clamp-2">{n.message}</p>
@@ -257,16 +276,16 @@ export function Header({ title, onToggleMobileSidebar }) {
         {/* USER PROFILE SNIPPET */}
         <div className="flex items-center space-x-2 pl-2 border-l border-slate-200">
           <img
-            src={activeUser.avatarUrl}
-            alt={activeUser.name}
+            src={activeUser?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'}
+            alt={activeUser?.name || 'User'}
             className="w-8 h-8 rounded-full object-cover ring-2 ring-slate-200"
           />
           <div className="hidden lg:block text-left">
             <p className="text-xs font-semibold text-slate-800 leading-tight">
-              {activeUser.name}
+              {activeUser?.name || 'User'}
             </p>
             <p className="text-[11px] text-slate-500 leading-tight">
-              {activeUser.department || roleDisplayName}
+              {activeUser?.department || roleDisplayName}
             </p>
           </div>
         </div>

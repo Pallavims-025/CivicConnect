@@ -15,10 +15,13 @@ app.use(
     origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps, curl, or server-to-server)
       if (!origin) return callback(null, true);
-      if (origin === CLIENT_ORIGIN || origin.startsWith('http://localhost:')) {
+      if (origin === CLIENT_ORIGIN) {
         return callback(null, true);
       }
-      return callback(null, true); // Permissive in development
+      if (process.env.NODE_ENV !== 'production' && origin.startsWith('http://localhost:')) {
+        return callback(null, true);
+      }
+      return callback(new Error('Origin is not allowed by CORS.'));
     },
     credentials: true,
   })
