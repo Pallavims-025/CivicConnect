@@ -45,11 +45,7 @@ export function MaterialRequests() {
   const [reqAdditionalNotes, setReqAdditionalNotes] = useState('');
 
   // Active supervisor work orders
-  const myWorkOrders = useMemo(() => {
-    return workOrders.filter(
-      (w) => !w.supervisor || w.supervisor.toLowerCase().includes('rao') || w.supervisor.toLowerCase().includes('supervisor')
-    );
-  }, [workOrders]);
+  const myWorkOrders = useMemo(() => workOrders, [workOrders]);
 
   const filteredRequests = useMemo(() => {
     return materialRequests.filter((r) => {
@@ -82,7 +78,7 @@ export function MaterialRequests() {
   };
 
   // Submit Request
-  const handleSubmitRequest = (e) => {
+  const handleSubmitRequest = async (e) => {
     e.preventDefault();
     if (!reqWO || !reqMatName.trim() || !reqQty) {
       alert('Please fill out all required requisition fields.');
@@ -91,7 +87,8 @@ export function MaterialRequests() {
 
     const targetWO = workOrders.find((w) => w.id === reqWO);
 
-    submitSupervisorMaterialRequest({
+    try {
+      await submitSupervisorMaterialRequest({
       workOrderId: reqWO,
       complaintId: targetWO?.complaintId,
       materialName: reqMatName.trim(),
@@ -101,25 +98,22 @@ export function MaterialRequests() {
       reason: reqReason.trim(),
       shortageDescription: reqShortageDesc.trim(),
       additionalNotes: reqAdditionalNotes.trim(),
-    });
-
-    setShowNewModal(false);
-    setReqMatName('');
-    setReqQty('');
-    setReqReason('');
-    setReqShortageDesc('');
-    setReqAdditionalNotes('');
-    alert('Material requisition submitted! This requisition now appears in the Municipal Officer Dashboard.');
+      });
+      setShowNewModal(false);
+      setReqMatName('');
+      setReqQty('');
+      setReqReason('');
+      setReqShortageDesc('');
+      setReqAdditionalNotes('');
+      alert('Material request submitted.');
+    } catch (error) {
+      alert(error.message || 'Material request could not be submitted.');
+    }
   };
 
   // Receive Supplies into Site Inventory
   const handleReceiveSupplies = (requestId) => {
-    try {
-      receiveMaterialSupplies(requestId);
-      alert('Supplies received! Site inventory updated with approved materials.');
-    } catch (err) {
-      alert(err.message);
-    }
+    receiveMaterialSupplies(requestId).catch((error) => alert(error.message));
   };
 
   return (
@@ -372,14 +366,18 @@ export function MaterialRequests() {
 
               <div>
                 <label className="font-bold text-slate-700 block mb-1">Material Name *</label>
-                <input
-                  type="text"
+                <select
                   value={reqMatName}
-                  onChange={(e) => setReqMatName(e.target.value)}
-                  placeholder="e.g. Cold-Mix Asphalt Bags (50kg), Ductile Iron Sleeve 110mm"
-                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-amber-500"
+                  onChange={(e) => {
+                    setReqMatName(e.target.value);
+                    setReqUnit(inventory.find((item) => item.name === e.target.value)?.unit || 'Units');
+                  }}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs font-semibold focus:ring-2 focus:ring-amber-500"
                   required
-                />
+                >
+                  <option value="">Choose department inventory material</option>
+                  {inventory.map((item) => <option key={item.id} value={item.name}>{item.name} ({item.availableQuantity} {item.unit})</option>)}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

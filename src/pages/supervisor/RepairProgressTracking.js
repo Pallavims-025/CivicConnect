@@ -38,7 +38,7 @@ export function RepairProgressTracking() {
   const [modalMode, setModalMode] = useState(null); // 'UPDATE_PROGRESS' | 'REPORT_DELAY'
 
   // Update Progress Form State
-  const [progressVal, setProgressVal] = useState(50);
+  const [progressVal, setProgressVal] = useState(0);
   const [notesVal, setNotesVal] = useState('');
   const [estDateVal, setEstDateVal] = useState('');
   const [blockerVal, setBlockerVal] = useState('');
@@ -49,11 +49,7 @@ export function RepairProgressTracking() {
   const [revisedDeadlineVal, setRevisedDeadlineVal] = useState('');
 
   // Supervisor work orders
-  const myWorkOrders = useMemo(() => {
-    return workOrders.filter(
-      (w) => !w.supervisor || w.supervisor.toLowerCase().includes('rao') || w.supervisor.toLowerCase().includes('supervisor')
-    );
-  }, [workOrders]);
+  const myWorkOrders = useMemo(() => workOrders, [workOrders]);
 
   const filteredOrders = useMemo(() => {
     return myWorkOrders.filter((wo) => {
@@ -90,36 +86,42 @@ export function RepairProgressTracking() {
     setModalMode(null);
   };
 
-  const handleSaveProgress = (e) => {
+  const handleSaveProgress = async (e) => {
     e.preventDefault();
     if (!activeWO) return;
 
-    updateWorkOrderProgress(activeWO.id, {
+    try {
+      await updateWorkOrderProgress(activeWO.id, {
       progress: progressVal,
       progressNotes: notesVal,
       estimatedCompletionDate: estDateVal,
       blockers: blockerVal ? [blockerVal] : [],
       notifyOfficer: notifyOfficerCheck,
-    });
-
-    handleCloseModal();
-    alert('Repair progress synchronized with Municipal Command & Citizen Timeline!');
+      });
+      handleCloseModal();
+      alert('Repair progress saved.');
+    } catch (error) {
+      alert(error.message || 'Progress could not be saved.');
+    }
   };
 
-  const handleSaveDelay = (e) => {
+  const handleSaveDelay = async (e) => {
     e.preventDefault();
     if (!activeWO || !delayReasonVal.trim()) {
       alert('Please state the delay reason.');
       return;
     }
 
-    reportWorkOrderDelay(activeWO.id, {
+    try {
+      await reportWorkOrderDelay(activeWO.id, {
       delayReason: delayReasonVal.trim(),
       revisedDeadline: revisedDeadlineVal,
-    });
-
-    handleCloseModal();
-    alert('Delay notification dispatched to Municipal Officer.');
+      });
+      handleCloseModal();
+      alert('Delay report saved.');
+    } catch (error) {
+      alert(error.message || 'Delay report could not be saved.');
+    }
   };
 
   return (
@@ -248,7 +250,7 @@ export function RepairProgressTracking() {
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 mt-1">
                     <span className="flex items-center space-x-1">
                       <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{wo.location || 'Ward 14 Indiranagar'}</span>
+                      <span>{wo.location || 'Location not provided'}</span>
                     </span>
                     <span>Department: <strong className="text-slate-700">{wo.department}</strong></span>
                     <span>Last Updated: <strong className="text-slate-700">{wo.lastUpdated || wo.issuedDate}</strong></span>

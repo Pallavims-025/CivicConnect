@@ -31,9 +31,7 @@ export function PhotoEvidence() {
   } = useCivic();
 
   // Supervisor work orders
-  const myWorkOrders = workOrders.filter(
-    (w) => !w.supervisor || w.supervisor.toLowerCase().includes('rao') || w.supervisor.toLowerCase().includes('supervisor')
-  );
+  const myWorkOrders = workOrders;
 
   const [selectedWOId, setSelectedWOId] = useState(
     myWorkOrders[0]?.id || ''
@@ -44,17 +42,17 @@ export function PhotoEvidence() {
 
   // Before Photos State
   const [beforePhotos, setBeforePhotos] = useState([]);
-  const [beforeCaption, setBeforeCaption] = useState('Site condition prior to excavation and grading');
+  const [beforeCaption, setBeforeCaption] = useState('');
 
   // After Photos State
   const [afterPhotos, setAfterPhotos] = useState([]);
-  const [afterNotes, setAfterNotes] = useState('Surface patched with cold-mix asphalt, leveled, and compacted to road grade.');
+  const [afterNotes, setAfterNotes] = useState('');
 
   // Geolocation & Manual Address State
-  const [gpsCoords, setGpsCoords] = useState('12.9784° N, 77.6408° E (CMH Road GPS Tagged)');
-  const [manualAddress, setManualAddress] = useState(currentWO?.location || 'Near Metro Pillar 142, CMH Road, Indiranagar');
+  const [gpsCoords, setGpsCoords] = useState('');
+  const [manualAddress, setManualAddress] = useState(currentWO?.location || '');
   const [isCapturingGPS, setIsCapturingGPS] = useState(false);
-  const [gpsConfirmed, setGpsConfirmed] = useState(true);
+  const [gpsConfirmed, setGpsConfirmed] = useState(false);
 
   // File Validation Errors
   const [errorMessage, setErrorMessage] = useState('');
@@ -74,8 +72,7 @@ export function PhotoEvidence() {
   // Capture Live Browser Geolocation
   const handleCaptureGPS = () => {
     if (!navigator.geolocation) {
-      setGpsCoords('12.9716° N, 77.5946° E (Bengaluru Central)');
-      setGpsConfirmed(true);
+      setErrorMessage('Location services are unavailable. Enter the site address manually.');
       return;
     }
     setIsCapturingGPS(true);
@@ -87,10 +84,8 @@ export function PhotoEvidence() {
         setGpsConfirmed(true);
       },
       () => {
-        // Fallback default
-        setGpsCoords('12.9784° N, 77.6408° E (Indiranagar Ward 14)');
+        setErrorMessage('Could not capture your location. Enter the site address manually.');
         setIsCapturingGPS(false);
-        setGpsConfirmed(true);
       },
       { timeout: 5000 }
     );
@@ -113,8 +108,8 @@ export function PhotoEvidence() {
     return true;
   };
 
-  // Mock Upload Handler (simulates file reading into preview URL)
-  const handleFileUpload = (e, section) => {
+  // Read the selected evidence files for upload and preview
+  const handleFileUpload = async (e, section) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
 
@@ -122,7 +117,12 @@ export function PhotoEvidence() {
       if (!validateFile(file)) return;
     }
 
-    const newPhotoUrls = files.map((file) => URL.createObjectURL(file));
+    const newPhotoUrls = await Promise.all(files.map((file) => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error(`Could not read ${file.name}.`));
+      reader.readAsDataURL(file);
+    })));
 
     if (section === 'BEFORE') {
       setBeforePhotos((prev) => [...prev, ...newPhotoUrls]);
@@ -141,26 +141,45 @@ export function PhotoEvidence() {
   };
 
   // Submit Evidence for Municipal Officer Verification
-  const handleSubmitEvidence = (e) => {
+  const handleSubmitEvidence = async (e) => {
     e.preventDefault();
     if (!afterPhotos.length) {
       setErrorMessage('Please upload at least one After-Repair photograph before submitting for verification.');
       return;
     }
 
-    const success = submitRepairEvidence(currentWO.id, {
+    try {
+      const success = await submitRepairEvidence(currentWO.id, {
       beforePhotos: beforePhotos.length > 0 ? beforePhotos : currentWO.beforePhotos,
       afterPhotos,
       repairNotes: afterNotes,
       gpsCoordinates: gpsCoords,
       manualLocation: manualAddress,
-    });
+      });
 
-    if (success) {
-      setSuccessBanner(true);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (success) {
+        setSuccessBanner(true);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } catch (error) {
+      setErrorMessage(error.message || 'Photo evidence could not be saved.');
     }
   };
+
+  if (myWorkOrders.length === 0) {
+    return (
+      <div className="space-y-6 pb-12 font-sans">
+        <div>
+          <h2 className="text-xl md:text-2xl font-extrabold text-civic-text flex items-center space-x-2">
+            <Camera className="w-6 h-6 text-emerald-600" />
+            <span>Before-and-After Photo Evidence</span>
+          </h2>
+          <p className="text-xs text-civic-muted mt-0.5">Photographic proof of repair completion for assigned work orders.</p>
+        </div>
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 text-sm font-medium text-blue-900">No work orders assigned yet.</div>
+      </div>
+    );
+  }
 
   const isRework = currentWO?.verificationStatus === 'REWORK_REQUESTED';
   const isAwaiting = currentWO?.verificationStatus === 'AWAITING_VERIFICATION';
@@ -189,7 +208,7 @@ export function PhotoEvidence() {
           </div>
           <p className="text-xs text-emerald-800 leading-relaxed pl-8">
             Work Order <strong>#{currentWO.id}</strong> status changed to <strong>AWAITING_VERIFICATION</strong>.
-            Er. Rajesh Kumar has been notified to review the side-by-side evidence. The citizen complaint remains safely unresolved until municipal officer signoff.
+            The assigned Municipal Officer has been notified to review the evidence. The complaint remains open until verification.
           </p>
         </div>
       )}
@@ -226,10 +245,8 @@ export function PhotoEvidence() {
           </div>
 
           <div className="flex items-center justify-end space-x-3 pt-2 md:pt-4">
-            <StatusBadge status={currentWO?.status || 'IN_PROGRESS'} />
-            <span className="font-mono text-xs font-bold text-civic-blue bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-200">
-              Complaint #{currentWO?.complaintId}
-            </span>
+            {currentWO && <StatusBadge status={currentWO.status} />}
+            {currentWO?.complaintId && <span className="font-mono text-xs font-bold text-civic-blue bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-200">Complaint #{currentWO.complaintId}</span>}
           </div>
         </div>
 
@@ -241,7 +258,7 @@ export function PhotoEvidence() {
               <span>Repair Rejected during Municipal Officer Quality Inspection</span>
             </div>
             <p className="text-rose-800 pl-6">
-              <strong>Officer Rejection Reason:</strong> "{currentWO.rejectionReason || 'Loose asphalt observed along curb edges. Corrective compaction required.'}"
+              <strong>Officer Rejection Reason:</strong> "{currentWO.rejectionReason || 'Review notes are not available.'}"
             </p>
             <p className="text-[11px] text-rose-700 pl-6">
               &rarr; Mobilize crew for corrective re-work, take fresh post-repair photographs, and re-submit for second verification.
@@ -377,7 +394,7 @@ export function PhotoEvidence() {
           </div>
 
           <div className="pt-3 border-t border-slate-100 text-[11px] text-slate-400 flex items-center justify-between">
-            <span>Timestamp: {currentWO?.issuedDate || '2026-10-12'}</span>
+            <span>Timestamp: {currentWO?.issuedDate ? new Date(currentWO.issuedDate).toLocaleString() : 'Not available'}</span>
             <span className="text-emerald-600 font-semibold flex items-center space-x-1">
               <Check className="w-3 h-3" />
               <span>Initial Evidence Logged</span>
@@ -463,7 +480,7 @@ export function PhotoEvidence() {
           </div>
 
           <div className="pt-3 border-t border-slate-100 text-[11px] text-slate-500 flex items-center justify-between">
-            <span>Inspector: Er. Rajesh Kumar</span>
+            <span>Assigned Municipal Officer review</span>
             <span className="font-semibold text-slate-700">Field Supervisor: {supervisorProfile.name}</span>
           </div>
         </div>

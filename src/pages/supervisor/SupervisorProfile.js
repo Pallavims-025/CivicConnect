@@ -16,9 +16,11 @@ import {
   Briefcase,
 } from 'lucide-react';
 import { useCivic } from '../../context/CivicContext';
+import { useAuth } from '../../context/AuthContext';
 
 export function SupervisorProfile() {
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const {
     supervisorProfile,
     updateSupervisorProfile,
@@ -28,22 +30,20 @@ export function SupervisorProfile() {
 
   // Editable Form State (Section 15)
   const [formData, setFormData] = useState({
-    name: supervisorProfile.name || 'Supervisor M. Rao',
-    employeeId: supervisorProfile.employeeId || 'EMP-SUP-2024-08',
-    email: supervisorProfile.email || 'm.rao@civicconnect.gov.in',
-    phone: supervisorProfile.phone || '+91 98451 22334',
-    department: supervisorProfile.department || 'Roads & Bridges Dept',
-    assignedArea: supervisorProfile.assignedArea || 'Central Zone - Ward 14 Indiranagar',
-    shift: supervisorProfile.shift || 'Day Shift (08:00 AM - 05:00 PM)',
+    name: supervisorProfile.name || '',
+    employeeId: supervisorProfile.employeeId || '',
+    email: supervisorProfile.email || '',
+    phone: supervisorProfile.phone || '',
+    department: supervisorProfile.department || '',
+    assignedArea: supervisorProfile.assignedArea || '',
+    shift: supervisorProfile.shift || '',
   });
 
   const [isEditing, setIsEditing] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   // Statistics
-  const activeWOCount = workOrders.filter(
-    (w) => !w.supervisor || w.supervisor.toLowerCase().includes('rao')
-  ).length;
+  const activeWOCount = workOrders.filter((workOrder) => workOrder.status !== 'COMPLETED').length;
 
   const totalTasksSupervised = workerTasks.length;
 
@@ -52,12 +52,17 @@ export function SupervisorProfile() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
-    updateSupervisorProfile(formData);
-    setIsEditing(false);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 4000);
+    try {
+      const saved = await updateSupervisorProfile(formData);
+      setIsEditing(false);
+      setFormData((previous) => ({ ...previous, name: saved.name || previous.name }));
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 4000);
+    } catch (error) {
+      alert(error.message || 'Profile could not be saved.');
+    }
   };
 
   const handleCancel = () => {
@@ -74,7 +79,7 @@ export function SupervisorProfile() {
   };
 
   const handleSignOut = () => {
-    navigate('/');
+    logout().finally(() => navigate('/login', { replace: true }));
   };
 
   return (
@@ -168,7 +173,7 @@ export function SupervisorProfile() {
           <div>
             <h4 className="text-base font-bold text-slate-900">Supervisor Account Details</h4>
             <p className="text-xs text-slate-400">
-              Demonstration profile fields connected to reactive state.
+              Profile details associated with your authenticated supervisor account.
             </p>
           </div>
 
@@ -226,7 +231,7 @@ export function SupervisorProfile() {
               <input
                 type="text"
                 name="employeeId"
-                disabled={!isEditing}
+                disabled
                 value={formData.employeeId}
                 onChange={handleInputChange}
                 className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 font-mono text-xs font-semibold text-slate-800 disabled:bg-slate-50 focus:ring-2 focus:ring-civic-blue"
@@ -277,7 +282,7 @@ export function SupervisorProfile() {
               <input
                 type="text"
                 name="department"
-                disabled={!isEditing}
+                disabled
                 value={formData.department}
                 onChange={handleInputChange}
                 className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 disabled:bg-slate-50 focus:ring-2 focus:ring-civic-blue"
@@ -311,7 +316,7 @@ export function SupervisorProfile() {
               <input
                 type="text"
                 name="shift"
-                disabled={!isEditing}
+                disabled
                 value={formData.shift}
                 onChange={handleInputChange}
                 className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 disabled:bg-slate-50 focus:ring-2 focus:ring-civic-blue"

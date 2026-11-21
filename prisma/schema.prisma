@@ -107,6 +107,8 @@ enum PhotoType {
 
 enum WorkOrderPhotoType {
   COMPLETION
+  BEFORE
+  AFTER
 }
 
 enum NotificationType {
@@ -176,6 +178,7 @@ model User {
   officerAssignedWorkOrders      WorkOrder[]              @relation("OfficerAssignedWorkOrders")
   workOrderHistoryActions        WorkOrderStatusHistory[] @relation("WorkOrderHistoryActor")
   workOrderPhotosUploaded        WorkOrderPhoto[]         @relation("WorkOrderPhotoUploader")
+  supervisorWorkerTasks          SupervisorWorkerTask[]   @relation("SupervisorWorkerTaskOwner")
   reviewedDuplicateMatches       DuplicateComplaintMatch[] @relation("DuplicateMatchReviewer")
   repairVerificationsSubmitted   RepairVerification[]     @relation("SupervisorVerifications")
   repairVerificationsReviewed    RepairVerification[]     @relation("OfficerVerifications")
@@ -335,6 +338,7 @@ model WorkOrder {
   statusHistory        WorkOrderStatusHistory[]
   photos               WorkOrderPhoto[]
   materialRequests     MaterialRequest[]
+  workerTasks          SupervisorWorkerTask[]
   inventoryTransactions InventoryTransaction[]
   notifications        Notification[]
 
@@ -380,6 +384,28 @@ model WorkOrderPhoto {
   @@index([workOrderId, photoType])
   @@index([uploadedByUserId])
   @@map("work_order_photos")
+}
+
+model SupervisorWorkerTask {
+  id              String    @id @default(uuid()) @db.VarChar(36)
+  workOrderId     String    @map("work_order_id") @db.VarChar(36)
+  supervisorId    String    @map("supervisor_id") @db.VarChar(36)
+  workerName      String    @map("worker_name") @db.VarChar(255)
+  workerContact   String?   @map("worker_contact") @db.VarChar(100)
+  taskDescription String    @map("task_description") @db.Text
+  deadline        DateTime?
+  progress        Int       @default(0)
+  status          String    @default("Not Started") @db.VarChar(50)
+  delayReason     String?   @map("delay_reason") @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  workOrder  WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  supervisor User      @relation("SupervisorWorkerTaskOwner", fields: [supervisorId], references: [id], onDelete: Cascade)
+
+  @@index([workOrderId])
+  @@index([supervisorId])
+  @@map("supervisor_worker_tasks")
 }
 
 model DuplicateComplaintMatch {

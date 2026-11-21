@@ -1,0 +1,2 @@
+ALTER TABLE `work_order_photos`
+  MODIFY `photo_type` ENUM('COMPLETION', 'BEFORE', 'AFTER') NOT NULL DEFAULT 'COMPLETION';

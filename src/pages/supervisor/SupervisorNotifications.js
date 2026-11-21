@@ -71,17 +71,13 @@ export function SupervisorNotifications() {
   // Navigate according to notification link
   const handleNotificationClick = (notif) => {
     markNotificationRead(notif.id);
-
-    if (notif.linkId?.startsWith('WO-')) {
-      if (notif.type === 'REWORK' || notif.type === 'VERIFICATION_PASSED') {
-        navigate('/supervisor/photo-evidence');
-      } else {
-        navigate('/supervisor/work-orders');
-      }
-    } else if (notif.linkId?.startsWith('MR-')) {
+    const title = (notif.title || '').toLowerCase();
+    if (title.includes('material')) {
       navigate('/supervisor/material-requests');
-    } else if (notif.linkId?.startsWith('RV-')) {
+    } else if (notif.type === 'REPAIR_VERIFICATION' || notif.type === 'REWORK' || notif.type === 'VERIFICATION_PASSED') {
       navigate('/supervisor/photo-evidence');
+    } else if (notif.workOrderId || notif.linkId) {
+      navigate('/supervisor/work-orders');
     }
   };
 

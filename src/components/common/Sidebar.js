@@ -40,8 +40,9 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
     notifications = [],
     materialRequests = [],
     setCurrentRole,
+    supervisorProfile,
   } = useCivic();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
 
   const citizenPendingCount = complaints.filter(
     (c) => c.status === 'PENDING' || c.status === 'UNDER_REVIEW'
@@ -121,16 +122,11 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
     { label: 'Profile', path: '/supervisor/profile', icon: User },
   ];
 
-  const supervisorNav = [
-    { label: 'My Assigned Work', path: '/supervisor', icon: Briefcase },
-    { label: 'Notifications', path: '/supervisor/notifications', icon: Bell },
-  ];
 
   let items = citizenNav;
   if (role === 'officer') items = officerNav;
   else if (role === 'supervisor') items = supervisorNav;
   else if (role === 'admin') items = adminNav;
-  else if (role === 'supervisor') items = supervisorNav;
 
   const handleRoleToggle = () => {
     const sequence = ['citizen', 'officer', 'supervisor', 'admin'];
@@ -201,6 +197,11 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
                 : 'System Administration'}
             </span>
           </span>
+          {role === 'supervisor' && (
+            <span className="ml-2 max-w-28 truncate text-[11px] font-semibold text-white" title={supervisorProfile?.name || user?.name || ''}>
+              {supervisorProfile?.name || user?.name || 'Field Supervisor'}
+            </span>
+          )}
           <button
             onClick={handleRoleToggle}
             className="text-[11px] text-blue-300 hover:text-white flex items-center space-x-1 font-semibold hover:underline cursor-pointer"
@@ -277,3 +278,5 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
     </>
   );
 }
+
+

@@ -41,9 +41,9 @@ export function WorkerAssignments() {
 
   // Add Task Form State
   const [newWO, setNewWO] = useState(workOrders[0]?.id || '');
-  const [newWorkerId, setNewWorkerId] = useState(workers[0]?.id || '');
+  const [newWorkerId, setNewWorkerId] = useState('');
   const [newTaskDesc, setNewTaskDesc] = useState('');
-  const [newDeadline, setNewDeadline] = useState('2026-10-25');
+  const [newDeadline, setNewDeadline] = useState('');
 
   // Edit Task Form State
   const [editWorkerId, setEditWorkerId] = useState('');
@@ -54,11 +54,7 @@ export function WorkerAssignments() {
   const [editDelayReason, setEditDelayReason] = useState('');
 
   // Active supervisor work orders
-  const myWorkOrders = useMemo(() => {
-    return workOrders.filter(
-      (w) => !w.supervisor || w.supervisor.toLowerCase().includes('rao') || w.supervisor.toLowerCase().includes('supervisor')
-    );
-  }, [workOrders]);
+  const myWorkOrders = useMemo(() => workOrders, [workOrders]);
 
   const filteredTasks = useMemo(() => {
     return workerTasks.filter((t) => {
@@ -87,39 +83,48 @@ export function WorkerAssignments() {
   };
 
   // Submit Add Task
-  const handleAddTaskSubmit = (e) => {
+  const handleAddTaskSubmit = async (e) => {
     e.preventDefault();
     if (!newWO || !newWorkerId || !newTaskDesc.trim()) {
       alert('Please fill out all task details.');
       return;
     }
     const targetWO = workOrders.find((w) => w.id === newWO);
-    addWorkerTask({
+    try {
+      await addWorkerTask({
       workOrderId: newWO,
       complaintId: targetWO?.complaintId,
-      workerId: newWorkerId,
+      workerName: newWorkerId.trim(),
       taskDescription: newTaskDesc.trim(),
       deadline: newDeadline,
-    });
-    setShowAddModal(false);
-    setNewTaskDesc('');
-    alert('New sub-task assigned to field specialist!');
+      });
+      setShowAddModal(false);
+      setNewTaskDesc('');
+      setNewWorkerId('');
+      alert('Worker assignment saved.');
+    } catch (error) {
+      alert(error.message || 'Worker assignment could not be saved.');
+    }
   };
 
   // Submit Edit Task
-  const handleEditTaskSubmit = (e) => {
+  const handleEditTaskSubmit = async (e) => {
     e.preventDefault();
     if (!editingTask) return;
-    updateWorkerTask(editingTask.id, {
-      workerId: editWorkerId,
+    try {
+      await updateWorkerTask(editingTask.id, {
+      workerName: editWorkerId,
       taskDescription: editDesc,
       deadline: editDeadline,
       progress: parseInt(editProgress) || 0,
       status: editStatus,
       delayReason: editStatus === 'Blocked' ? editDelayReason : '',
-    });
-    setEditingTask(null);
-    alert('Task assignment updated!');
+      });
+      setEditingTask(null);
+      alert('Worker assignment updated.');
+    } catch (error) {
+      alert(error.message || 'Worker assignment could not be updated.');
+    }
   };
 
   return (
@@ -365,7 +370,7 @@ export function WorkerAssignments() {
                         <button
                           onClick={() => {
                             if (window.confirm(`Delete task #${task.id}?`)) {
-                              deleteWorkerTask(task.id);
+                              deleteWorkerTask(task.id).catch((error) => alert(error.message || 'Assignment could not be deleted.'));
                             }
                           }}
                           className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
@@ -416,18 +421,15 @@ export function WorkerAssignments() {
 
               <div>
                 <label className="font-bold text-slate-700 block mb-1">Assign to Specialist *</label>
-                <select
+                <input
+                  type="text"
+                  maxLength={255}
                   value={newWorkerId}
                   onChange={(e) => setNewWorkerId(e.target.value)}
+                  placeholder="Enter assigned worker name"
                   className="w-full p-2.5 rounded-xl border border-slate-200 text-xs font-semibold focus:ring-2 focus:ring-indigo-600"
                   required
-                >
-                  {workers.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.name} ({w.role}) - {w.status}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
 
               <div>
@@ -494,17 +496,15 @@ export function WorkerAssignments() {
             <form onSubmit={handleEditTaskSubmit} className="space-y-4 text-xs">
               <div>
                 <label className="font-bold text-slate-700 block mb-1">Reassign Worker</label>
-                <select
+                <input
+                  type="text"
+                  maxLength={255}
                   value={editWorkerId}
                   onChange={(e) => setEditWorkerId(e.target.value)}
+                  placeholder="Enter assigned worker name"
                   className="w-full p-2.5 rounded-xl border border-slate-200 text-xs font-semibold focus:ring-2 focus:ring-indigo-600"
-                >
-                  {workers.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.name} ({w.role})
-                    </option>
-                  ))}
-                </select>
+                  required
+                />
               </div>
 
               <div>

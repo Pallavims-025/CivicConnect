@@ -36,7 +36,7 @@ export function ProgressReports() {
   // Form Fields (Section 13)
   const [reportWO, setReportWO] = useState(workOrders[0]?.id || '');
   const [workCompleted, setWorkCompleted] = useState('');
-  const [currentProgress, setCurrentProgress] = useState(65);
+  const [currentProgress, setCurrentProgress] = useState(0);
   const [selectedWorkers, setSelectedWorkers] = useState([]);
   const [materialsUsed, setMaterialsUsed] = useState('');
   const [remainingWork, setRemainingWork] = useState('');
@@ -45,11 +45,7 @@ export function ProgressReports() {
   const [reportPhotos, setReportPhotos] = useState([]);
 
   // Active supervisor work orders
-  const myWorkOrders = useMemo(() => {
-    return workOrders.filter(
-      (w) => !w.supervisor || w.supervisor.toLowerCase().includes('rao') || w.supervisor.toLowerCase().includes('supervisor')
-    );
-  }, [workOrders]);
+  const myWorkOrders = useMemo(() => workOrders, [workOrders]);
 
   const filteredReports = useMemo(() => {
     return progressReports.filter((r) => {
@@ -80,28 +76,31 @@ export function ProgressReports() {
   };
 
   // Submit Progress Report
-  const handleSubmitReport = (e) => {
+  const handleSubmitReport = async (e) => {
     e.preventDefault();
     if (!reportWO || !workCompleted.trim()) {
       alert('Please fill out the required report summary fields.');
       return;
     }
 
-    const newReport = submitProgressReport({
+    try {
+      const newReport = await submitProgressReport({
       workOrderId: reportWO,
       workCompleted: workCompleted.trim(),
       currentProgress,
       workersInvolved: selectedWorkers,
-      materialsUsed: materialsUsed.trim() || 'Standard site materials',
+      materialsUsed: materialsUsed.trim(),
       remainingWork: remainingWork.trim() || 'None',
       problemsOrDelays: problemsOrDelays.trim() || 'None',
       photoEvidence: reportPhotos,
-      nextSteps: nextSteps.trim() || 'Continue according to schedule',
-    });
-
-    setShowCreateModal(false);
-    setViewingReport(newReport);
-    alert('Official municipal progress report successfully submitted!');
+      nextSteps: nextSteps.trim(),
+      });
+      setShowCreateModal(false);
+      setViewingReport(newReport);
+      alert('Progress report saved.');
+    } catch (error) {
+      alert(error.message || 'Progress report could not be saved.');
+    }
   };
 
   return (
@@ -476,7 +475,7 @@ export function ProgressReports() {
               </div>
               <div>
                 <span className="text-slate-400 block font-semibold text-[10px]">ZONE</span>
-                <span className="font-bold text-slate-800">Indiranagar Ward 14</span>
+                <span className="font-bold text-slate-800">{supervisorProfile.assignedArea || 'Not assigned'}</span>
               </div>
             </div>
 

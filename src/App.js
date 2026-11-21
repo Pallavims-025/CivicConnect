@@ -1,8 +1,18 @@
 import React, { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Shield } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import { useCivic } from './context/CivicContext';
+
+import { SupervisorHome } from './pages/supervisor/SupervisorHome';
+import { AssignedWorkOrders } from './pages/supervisor/AssignedWorkOrders';
+import { WorkerAssignments } from './pages/supervisor/WorkerAssignments';
+import { RepairProgressTracking } from './pages/supervisor/RepairProgressTracking';
+import { PhotoEvidence } from './pages/supervisor/PhotoEvidence';
+import { MaterialInventory } from './pages/supervisor/MaterialInventory';
+import { MaterialRequests } from './pages/supervisor/MaterialRequests';
+import { ProgressReports } from './pages/supervisor/ProgressReports';
+import { SupervisorNotifications } from './pages/supervisor/SupervisorNotifications';
+import { SupervisorProfile } from './pages/supervisor/SupervisorProfile';
 
 // Layouts
 import { CitizenLayout } from './layouts/CitizenLayout';
@@ -10,8 +20,7 @@ import { OfficerLayout } from './layouts/OfficerLayout';
 import { SupervisorLayout } from './layouts/SupervisorLayout';
 import { AdminLayout } from './layouts/AdminLayout';
 
-// Landing and Login Pages
-import { LandingPage } from './pages/LandingPage';
+// Login Page
 import { LoginPage } from './pages/LoginPage';
 
 // Citizen Pages (Member 1)
@@ -65,7 +74,7 @@ function ProtectedRoute({ roles, children }) {
 function HomeRoute() {
   const { user, loading } = useAuth();
   if (loading) return <div className="min-h-screen grid place-items-center text-slate-600">Restoring your secure session…</div>;
-  return user ? <Navigate to={roleHome(user.role)} replace /> : <LandingPage />;
+  return user ? <Navigate to={roleHome(user.role)} replace /> : <LoginPage initialMode="login" />;
 }
 
 function FieldOfficerNotice() {
@@ -100,7 +109,7 @@ export default function App() {
     setOfficerProfile,
     setSupervisorProfile,
     syncPersistedComplaints,
- , syncPersistedNotifications } = useCivic();
+    syncPersistedNotifications } = useCivic();
 
   useEffect(() => {
     if (!user) {
@@ -159,9 +168,9 @@ export default function App() {
 
   return (
     <Routes>
-      {/* Landing / Login Routes */}
+      {/* Login Routes */}
       <Route path="/" element={<HomeRoute />} />
-      <Route path="/landing" element={<LandingPage />} />
+      <Route path="/landing" element={<Navigate to="/" replace />} />
       <Route path="/login" element={<LoginPage initialMode="login" />} />
       <Route path="/signup" element={<LoginPage initialMode="signup" />} />
       <Route path="/field-officer-unavailable" element={<FieldOfficerNotice />} />
@@ -183,16 +192,6 @@ export default function App() {
         <Route path="feedback" element={<MyFeedback />} />
         <Route path="profile" element={<CitizenProfile />} />
         <Route path="help" element={<HelpSupport />} />
-      </Route>
-
-      <Route path="/supervisor" element={<ProtectedRoute roles={['SUPERVISOR']}><OfficerLayout role="supervisor" pageTitle="Field Supervisor Assignments" /></ProtectedRoute>}>
-        <Route index element={<SupervisorAssignments />} />
-        <Route path="notifications" element={<OfficerNotifications />} />
-      </Route>
-
-      <Route path="/supervisor" element={<ProtectedRoute roles={['SUPERVISOR']}><OfficerLayout role="supervisor" pageTitle="Field Supervisor Assignments" /></ProtectedRoute>}>
-        <Route index element={<SupervisorAssignments />} />
-        <Route path="notifications" element={<OfficerNotifications />} />
       </Route>
 
       {/* Municipal Officer Portal Routes (Member 2) */}
@@ -227,6 +226,8 @@ export default function App() {
         }
       >
         <Route index element={<SupervisorHome />} />
+        <Route path="field-assignments" element={<SupervisorAssignments />} />
+        <Route path="officer-notifications" element={<OfficerNotifications />} />
         <Route path="work-orders" element={<AssignedWorkOrders />} />
         <Route path="worker-assignments" element={<WorkerAssignments />} />
         <Route path="repair-progress" element={<RepairProgressTracking />} />
@@ -260,3 +261,4 @@ export default function App() {
     </Routes>
   );
 }
+

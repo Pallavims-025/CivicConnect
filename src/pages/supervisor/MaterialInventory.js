@@ -42,11 +42,7 @@ export function MaterialInventory() {
   const [txnError, setTxnError] = useState('');
 
   // Active supervisor work orders
-  const myWorkOrders = useMemo(() => {
-    return workOrders.filter(
-      (w) => !w.supervisor || w.supervisor.toLowerCase().includes('rao') || w.supervisor.toLowerCase().includes('supervisor')
-    );
-  }, [workOrders]);
+  const myWorkOrders = useMemo(() => workOrders, [workOrders]);
 
   const filteredMaterials = useMemo(() => {
     return siteMaterials.filter((m) => {
@@ -72,7 +68,7 @@ export function MaterialInventory() {
   };
 
   // Submit Transaction
-  const handleTransactionSubmit = (e) => {
+  const handleTransactionSubmit = async (e) => {
     e.preventDefault();
     setTxnError('');
 
@@ -83,7 +79,7 @@ export function MaterialInventory() {
 
       const targetMat = chosenItem || inventory.find((inv) => inv.id === selectedMatId);
 
-      recordMaterialTransaction({
+      await recordMaterialTransaction({
         workOrderId: txnWO,
         materialId: selectedMatId,
         materialName: targetMat ? targetMat.name || targetMat.materialName : 'Site Material',
@@ -94,7 +90,7 @@ export function MaterialInventory() {
       });
 
       setShowTxnModal(false);
-      alert('Material transaction successfully recorded!');
+      alert('Material movement saved.');
     } catch (err) {
       setTxnError(err.message || 'Error processing transaction.');
     }

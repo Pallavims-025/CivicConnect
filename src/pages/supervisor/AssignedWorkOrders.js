@@ -45,18 +45,14 @@ export function AssignedWorkOrders() {
 
   // Form states for modals
   const [selectedWorkersList, setSelectedWorkersList] = useState([]);
-  const [progressVal, setProgressVal] = useState(50);
+  const [progressVal, setProgressVal] = useState(0);
   const [progressNotes, setProgressNotes] = useState('');
   const [newSiteNote, setNewSiteNote] = useState('');
   const [delayReason, setDelayReason] = useState('');
   const [revisedDeadline, setRevisedDeadline] = useState('');
 
   // Filter to supervisor's work orders
-  const myWorkOrders = useMemo(() => {
-    return workOrders.filter(
-      (w) => !w.supervisor || w.supervisor.toLowerCase().includes('rao') || w.supervisor.toLowerCase().includes('supervisor')
-    );
-  }, [workOrders]);
+  const myWorkOrders = useMemo(() => workOrders, [workOrders]);
 
   const filteredWorkOrders = useMemo(() => {
     return myWorkOrders.filter((wo) => {
@@ -97,49 +93,57 @@ export function AssignedWorkOrders() {
   };
 
   // Submit Worker Assignments
-  const handleAssignWorkersSubmit = (e) => {
+  const handleAssignWorkersSubmit = async (e) => {
     e.preventDefault();
     if (!selectedWO) return;
-    assignWorkersToWorkOrder(selectedWO.id, selectedWorkersList);
-    handleCloseModal();
-    alert('Assigned workers successfully updated!');
+    try {
+      await assignWorkersToWorkOrder(selectedWO.id, selectedWorkersList);
+      handleCloseModal();
+      alert('Crew assignment saved.');
+    } catch (error) { alert(error.message || 'Crew assignment could not be saved.'); }
   };
 
   // Submit Progress
-  const handleProgressSubmit = (e) => {
+  const handleProgressSubmit = async (e) => {
     e.preventDefault();
     if (!selectedWO) return;
-    updateWorkOrderProgress(selectedWO.id, {
+    try {
+      await updateWorkOrderProgress(selectedWO.id, {
       progress: progressVal,
       progressNotes,
       notifyOfficer: true,
-    });
-    handleCloseModal();
-    alert('Work order progress saved!');
+      });
+      handleCloseModal();
+      alert('Work order progress saved.');
+    } catch (error) { alert(error.message || 'Progress could not be saved.'); }
   };
 
   // Submit Site Note
-  const handleSiteNoteSubmit = (e) => {
+  const handleSiteNoteSubmit = async (e) => {
     e.preventDefault();
     if (!selectedWO || !newSiteNote.trim()) return;
-    addWorkOrderSiteNotes(selectedWO.id, newSiteNote.trim());
-    handleCloseModal();
-    alert('Site note added to audit trail!');
+    try {
+      await addWorkOrderSiteNotes(selectedWO.id, newSiteNote.trim());
+      handleCloseModal();
+      alert('Site note saved.');
+    } catch (error) { alert(error.message || 'Site note could not be saved.'); }
   };
 
   // Submit Delay Report
-  const handleDelaySubmit = (e) => {
+  const handleDelaySubmit = async (e) => {
     e.preventDefault();
     if (!selectedWO || !delayReason.trim()) {
       alert('Please specify the delay reason.');
       return;
     }
-    reportWorkOrderDelay(selectedWO.id, {
+    try {
+      await reportWorkOrderDelay(selectedWO.id, {
       delayReason,
       revisedDeadline,
-    });
-    handleCloseModal();
-    alert('Delay reported to Municipal Officer and recorded in complaint history.');
+      });
+      handleCloseModal();
+      alert('Delay report saved.');
+    } catch (error) { alert(error.message || 'Delay report could not be saved.'); }
   };
 
   // Find original complaint
@@ -260,7 +264,7 @@ export function AssignedWorkOrders() {
                     <td className="py-3.5 px-4 max-w-[180px]">
                       <div className="flex items-center space-x-1 text-slate-600 truncate">
                         <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span className="truncate">{wo.location || 'Ward 14'}</span>
+                        <span className="truncate">{wo.location || 'Location not provided'}</span>
                       </div>
                     </td>
 
@@ -423,7 +427,7 @@ export function AssignedWorkOrders() {
               </div>
               <div>
                 <span className="text-slate-400 font-semibold block">Citizen Reported By</span>
-                <span className="font-bold text-slate-800">{activeComplaint?.citizenName || 'Priya Sharma'}</span>
+                <span className="font-bold text-slate-800">{activeComplaint?.citizenName || 'Not provided'}</span>
               </div>
               <div>
                 <span className="text-slate-400 font-semibold block">Category</span>

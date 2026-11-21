@@ -1,6 +1,21 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { markNotificationReadRequest } from '../services/api';
 import {
+  fetchSupervisorDashboardData,
+  updateSupervisorCrew,
+  addSupervisorSiteNote,
+  updateSupervisorProfileRequest,
+  apiUpdateProgress,
+  apiReportDelay,
+  apiRecordMaterialTxn,
+  apiSubmitMaterialRequest,
+  apiSubmitPhotoEvidence,
+  apiSubmitProgressReport,
+  apiCreateWorkerTask,
+  updateSupervisorWorkerTask,
+  deleteSupervisorWorkerTask,
+} from '../services/supervisorApi';
+import {
   INITIAL_CATEGORIES,
   INITIAL_CITIZEN,
   INITIAL_OFFICER,
@@ -49,6 +64,173 @@ export function CivicProvider({ children }) {
   const [siteMaterials, setSiteMaterials] = useState(INITIAL_SITE_MATERIALS);
   const [materialTransactions, setMaterialTransactions] = useState(INITIAL_MATERIAL_TRANSACTIONS);
   const [progressReports, setProgressReports] = useState(INITIAL_PROGRESS_REPORTS);
+  const [supervisorDataReady, setSupervisorDataReady] = useState(false);
+  const [supervisorDataError, setSupervisorDataError] = useState('');
+
+  const loadSupervisorData = async (authenticatedUser) => {
+    setSupervisorDataReady(false);
+    setSupervisorDataError('');
+    setWorkOrders([]);
+    setInventory([]);
+    setMaterialRequests([]);
+    setVerifications([]);
+    setNotifications([]);
+    setWorkers([]);
+    setWorkerTasks([]);
+    setSiteMaterials([]);
+    setMaterialTransactions([]);
+    setProgressReports([]);
+    setComplaints([]);
+    setSupervisorProfile({
+      id: authenticatedUser?.id || '',
+      name: authenticatedUser?.name || '',
+      email: authenticatedUser?.email || '',
+      phone: authenticatedUser?.phone || '',
+      avatarUrl: authenticatedUser?.avatarUrl || '',
+      title: authenticatedUser?.title || '',
+      employeeId: '',
+      department: authenticatedUser?.department?.name || '',
+      assignedArea: authenticatedUser?.wardCoverage || '',
+      shift: '',
+    });
+    try {
+      const result = await fetchSupervisorDashboardData();
+      const profile = result.profile || {};
+      setSupervisorProfile({
+        id: profile.id || authenticatedUser?.id || '',
+        name: profile.name || authenticatedUser?.name || '',
+        email: profile.email || authenticatedUser?.email || '',
+        phone: profile.phone || authenticatedUser?.phone || '',
+        avatarUrl: profile.avatarUrl || authenticatedUser?.avatarUrl || '',
+        title: profile.title || '',
+        employeeId: '',
+        department: profile.department?.name || '',
+        assignedArea: profile.wardCoverage || '',
+        shift: '',
+      });
+      const orders = (result.orders || []).map((order) => {
+        const complaint = order.complaint || {};
+        const photos = order.photos || [];
+        const history = order.statusHistory || [];
+        const verification = order.repairVerifications?.[0];
+        const siteNotes = history.filter((entry) => entry.changedByUserId === profile.id && entry.notes).map((entry) => ({ date: entry.createdAt, text: entry.notes, author: entry.changedByName }));
+        return {
+          id: order.workOrderCode || order.id,
+          dbId: order.id,
+          complaintId: complaint.complaintCode || complaint.id || '',
+          complaintDbId: complaint.id || '',
+          complaintTitle: complaint.title || '',
+          category: complaint.category?.name || '',
+          location: complaint.address || '',
+          department: order.department?.name || '',
+          supervisor: profile.name || authenticatedUser?.name || '',
+          priority: order.priority,
+          workDescription: order.workDescription,
+          issuedDate: order.issuedDate,
+          startDate: order.acceptedAt || order.assignedAt || order.issuedDate,
+          deadline: order.deadline,
+          estimatedCompletionDate: order.deadline,
+          actualCompletionDate: order.completedDate,
+          status: order.status,
+          progress: order.progress || 0,
+          estimatedCost: order.estimatedCost,
+          assignedCrew: order.assignedCrew || '',
+          assignedWorkers: order.assignedCrew ? order.assignedCrew.split(',').map((worker) => worker.trim()).filter(Boolean) : [],
+          siteNotes,
+          blockers: [],
+          delayReport: null,
+          beforePhotos: [...(complaint.photos || []).map((photo) => photo.imageUrl), ...photos.filter((photo) => photo.photoType === 'BEFORE').map((photo) => photo.imageUrl)],
+          afterPhotos: photos.filter((photo) => photo.photoType !== 'BEFORE').map((photo) => photo.imageUrl),
+          verificationStatus: verification?.status || 'NOT_SUBMITTED',
+          rejectionReason: verification?.officerRemarks || '',
+          raw: order,
+        };
+      });
+      setWorkOrders(orders);
+      const tasks = (result.workerTasks || []).map((task) => ({
+        id: task.id,
+        workOrderId: task.workOrder?.workOrderCode || orders.find((order) => order.dbId === task.workOrderId)?.id || task.workOrderId,
+        dbWorkOrderId: task.workOrderId,
+        workerId: task.workerName,
+        workerName: task.workerName,
+        workerRole: '',
+        workerContact: task.workerContact || '',
+        taskDescription: task.taskDescription,
+        assignedDate: task.createdAt,
+        deadline: task.deadline || '',
+        progress: task.progress || 0,
+        status: task.status,
+        delayReason: task.delayReason || '',
+      }));
+      setWorkerTasks(tasks);
+      setWorkers([...new Map(tasks.map((task) => [task.workerName, {
+        id: task.workerName, name: task.workerName, role: '',
+        status: tasks.some((entry) => entry.workerName === task.workerName && entry.status !== 'Completed') ? 'ACTIVE' : 'INACTIVE',
+      }])).values()]);
+      setComplaints([...new Map((result.orders || []).map(({ complaint }) => complaint).filter(Boolean).map((c) => [c.id, {
+        id: c.complaintCode || c.id, dbId: c.id, title: c.title || '', description: c.description || '', address: c.address || '',
+        citizenName: c.user?.name || '', photos: (c.photos || []).map((p) => p.imageUrl),
+      }])).values()]);
+      setInventory((result.inventory || []).map((item) => ({ ...item, id: item.id, name: item.name, lastUpdated: item.updatedAt })));
+      setMaterialRequests((result.requests || []).map((request) => {
+        const items = request.items || [];
+        const first = items[0];
+        const qty = first?.requestedQty || 0;
+        return {
+          id: request.requestCode || request.id,
+          dbId: request.id,
+          workOrderId: request.workOrder?.workOrderCode || request.workOrderId,
+          complaintId: request.workOrder?.complaintId || '',
+          requestedBy: request.requestedByName,
+          department: request.workOrder?.department?.name || '',
+          requestDate: request.requestDate,
+          status: request.status,
+          priority: request.priority,
+          items: items.map((line) => ({ itemId: line.inventoryItemId, itemName: line.inventoryItem?.name || '', requestedQty: line.requestedQty, approvedQty: line.approvedQty, unit: line.inventoryItem?.unit || '' })),
+          materialName: first?.inventoryItem?.name || '', requestedQty: qty, approvedQty: first?.approvedQty || 0,
+          unit: first?.inventoryItem?.unit || '', reason: request.reason || '', decisionNotes: request.decisionNotes || '',
+        };
+      }));
+      const transactions = result.transactions || [];
+      setMaterialTransactions(transactions.map((txn) => ({
+        id: txn.id, workOrderId: orders.find((order) => order.dbId === txn.workOrderId)?.id || txn.workOrderId,
+        materialId: txn.inventoryItemId, materialName: txn.inventoryItem?.name || '', unit: txn.inventoryItem?.unit || '',
+        type: txn.transactionType === 'STOCK_ADDITION' ? 'RECEIVED' : txn.transactionType === 'STOCK_RETURN' ? 'RETURNED' : 'USED',
+        quantity: Math.abs(txn.quantityChange), balanceAfter: txn.balanceAfter, timestamp: txn.createdAt, reason: txn.reason,
+      })));
+      setSiteMaterials(transactions.map((txn) => ({
+        id: txn.id, materialId: txn.inventoryItemId, materialName: txn.inventoryItem?.name || '', unit: txn.inventoryItem?.unit || '',
+        workOrderId: orders.find((order) => order.dbId === txn.workOrderId)?.id || txn.workOrderId,
+        requiredQuantity: 0, approvedQuantity: 0,
+        receivedQuantity: txn.transactionType === 'STOCK_ADDITION' ? txn.quantityChange : 0,
+        usedQuantity: txn.transactionType === 'STOCK_DISPATCH' ? Math.abs(txn.quantityChange) : 0,
+        returnedQuantity: txn.transactionType === 'STOCK_RETURN' ? txn.quantityChange : 0,
+        remainingQuantity: txn.balanceAfter, transactionDate: txn.createdAt, status: 'RECORDED', notes: txn.reason,
+      })));
+      setNotifications((result.notifications || []).map((item) => ({
+        id: item.id, role: (item.targetRole || '').toLowerCase(), type: item.notificationType, title: item.title, message: item.message,
+        timestamp: item.createdAt, read: item.isRead, linkId: item.linkId || item.workOrderId || item.complaintId,
+        workOrderId: item.workOrderId, complaintId: item.complaintId,
+      })));
+      setVerifications(orders.flatMap((order) => (order.raw.repairVerifications || []).map((record) => ({
+        id: record.id, workOrderId: order.id, complaintId: order.complaintId, complaintTitle: order.complaintTitle,
+        status: record.status, submittedAt: record.submittedAt, completionDetails: record.completionDetails,
+        beforePhoto: record.beforePhotoUrl, completionPhoto: record.completionPhotoUrl, officerRemarks: record.officerRemarks,
+      }))));
+      const reports = (result.orders || []).flatMap((order) => (order.statusHistory || [])
+        .filter((entry) => entry.changedByUserId === profile.id && entry.notes?.startsWith('Progress report:'))
+        .map((entry) => {
+          let details = {};
+          try { details = JSON.parse(entry.notes.slice('Progress report:'.length).trim()); } catch { /* Older plain-text progress entries stay visible. */ }
+          return { ...details, photoEvidence: details.photoEvidence || [...(order.beforePhotos || []), ...(order.afterPhotos || [])], id: entry.id, workOrderId: order.workOrderCode || order.id, reportDateTime: entry.createdAt, workCompleted: details.workCompleted || entry.notes, currentProgress: details.currentProgress ?? order.progress ?? 0, submittedBy: entry.changedByName };
+        }));
+      setProgressReports(reports);
+    } catch (error) {
+      setSupervisorDataError(error.message || 'Supervisor data could not be loaded from the server.');
+    } finally {
+      setSupervisorDataReady(true);
+    }
+  };
 
   const nowString = () => {
     const d = new Date();
@@ -620,13 +802,22 @@ export function CivicProvider({ children }) {
   // ==========================================
 
   // Profile update
-  const updateSupervisorProfile = (updated) => {
-    setSupervisorProfile((prev) => ({ ...prev, ...updated }));
-    logAudit(`${supervisorProfile.name} (Field Supervisor)`, 'UPDATE_PROFILE', 'Supervisor Account', 'Updated profile information.');
+  const updateSupervisorProfile = async (updated) => {
+    const saved = await updateSupervisorProfileRequest(updated);
+    setSupervisorProfile({ ...supervisorProfile, ...saved, department: saved.department?.name || '' });
+    return saved;
   };
 
   // Worker task assignment actions
   const addWorkerTask = (taskData) => {
+    const order = workOrders.find((item) => item.id === taskData.workOrderId);
+    if (!order) return Promise.reject(new Error('Assigned work order not found.'));
+    const workerName = taskData.workerName || workers.find((worker) => worker.id === taskData.workerId)?.name || '';
+    return apiCreateWorkerTask({ ...taskData, workOrderId: order.dbId || taskData.workOrderId, workerName }).then((result) => {
+      if (!result.success) throw new Error(result.error || 'Worker assignments are unavailable.');
+      return loadSupervisorData(supervisorProfile).then(() => result.data);
+    });
+    /* Legacy demo implementation retained below for reference only.
     const newTaskId = `TSK-${Date.now().toString().slice(-4)}`;
     const worker = workers.find((w) => w.id === taskData.workerId);
     const newTask = {
@@ -668,10 +859,14 @@ export function CivicProvider({ children }) {
       `Assigned "${taskData.taskDescription}" to ${newTask.workerName} under #${taskData.workOrderId}`
     );
 
-    return newTask;
+    return newTask; */
   };
 
   const updateWorkerTask = (taskId, updatedFields) => {
+    const workerName = updatedFields.workerName || workers.find((worker) => worker.id === updatedFields.workerId)?.name || updatedFields.workerId;
+    const payload = Object.fromEntries(['taskDescription', 'deadline', 'progress', 'status', 'delayReason'].filter((key) => key in updatedFields).map((key) => [key, updatedFields[key]]));
+    return updateSupervisorWorkerTask(taskId, { ...payload, workerName }).then(() => loadSupervisorData(supervisorProfile));
+    /* Legacy demo implementation retained below for reference only.
     setWorkerTasks((prev) =>
       prev.map((t) => {
         if (t.id === taskId) {
@@ -695,210 +890,67 @@ export function CivicProvider({ children }) {
       'UPDATE_WORKER_TASK',
       `Task #${taskId}`,
       `Updated fields: ${Object.keys(updatedFields).join(', ')}`
-    );
+    ); */
   };
 
   const deleteWorkerTask = (taskId) => {
+    return deleteSupervisorWorkerTask(taskId).then(() => loadSupervisorData(supervisorProfile));
+    /* Legacy demo implementation retained below for reference only.
     setWorkerTasks((prev) => prev.filter((t) => t.id !== taskId));
-    logAudit(`${supervisorProfile.name} (Supervisor)`, 'DELETE_WORKER_TASK', `Task #${taskId}`, 'Task deleted.');
+    logAudit(`${supervisorProfile.name} (Supervisor)`, 'DELETE_WORKER_TASK', `Task #${taskId}`, 'Task deleted.'); */
   };
 
   // Assign multiple workers to a work order
   const assignWorkersToWorkOrder = (workOrderId, workerNames) => {
-    setWorkOrders((prev) =>
-      prev.map((wo) => (wo.id === workOrderId ? { ...wo, assignedWorkers: workerNames } : wo))
-    );
-
-    const timestamp = nowString();
-    const wo = workOrders.find((w) => w.id === workOrderId);
-    if (wo) {
-      setComplaints((prev) =>
-        prev.map((c) => {
-          if (c.id === wo.complaintId) {
-            return {
-              ...c,
-              timeline: [
-                ...c.timeline,
-                {
-                  date: timestamp,
-                  title: 'Crew Assigned to Work Order',
-                  description: `Field supervisor ${supervisorProfile.name} deployed crew: ${workerNames.join(', ')}.`,
-                  by: supervisorProfile.name,
-                },
-              ],
-            };
-          }
-          return c;
-        })
-      );
-    }
-
-    logAudit(
-      `${supervisorProfile.name} (Supervisor)`,
-      'ASSIGN_CREW',
-      `Work Order #${workOrderId}`,
-      `Assigned workers: ${workerNames.join(', ')}`
-    );
+    const order = workOrders.find((item) => item.id === workOrderId);
+    if (!order) return Promise.reject(new Error('Assigned work order not found.'));
+    return updateSupervisorCrew(order.dbId || workOrderId, workerNames).then(() => loadSupervisorData(supervisorProfile));
   };
 
   // Repair Progress Update (Section 9)
   // CRITICAL REQUIREMENT: Even at 100%, complaint MUST NOT automatically become Resolved!
   const updateWorkOrderProgress = (workOrderId, { progress, progressNotes, blockers, estimatedCompletionDate, notifyOfficer }) => {
-    const numProgress = Math.min(100, Math.max(0, parseInt(progress) || 0));
-    const timestamp = nowString();
-
-    setWorkOrders((prev) =>
-      prev.map((wo) => {
-        if (wo.id === workOrderId) {
-          const notes = wo.siteNotes || [];
-          const updatedNotes = progressNotes
-            ? [{ date: timestamp, text: progressNotes, author: supervisorProfile.name }, ...notes]
-            : notes;
-
-          return {
-            ...wo,
-            progress: numProgress,
-            estimatedCompletionDate: estimatedCompletionDate || wo.estimatedCompletionDate,
-            blockers: blockers || wo.blockers,
-            siteNotes: updatedNotes,
-            lastUpdated: timestamp,
-          };
-        }
-        return wo;
-      })
-    );
-
-    const wo = workOrders.find((w) => w.id === workOrderId);
-    if (wo) {
-      // Append timeline event to citizen complaint without auto-resolving
-      setComplaints((prev) =>
-        prev.map((c) => {
-          if (c.id === wo.complaintId) {
-            const isFinished = numProgress === 100;
-            return {
-              ...c,
-              lastUpdated: timestamp,
-              timeline: [
-                ...c.timeline,
-                {
-                  date: timestamp,
-                  title: `Repair Progress: ${numProgress}%`,
-                  description: isFinished
-                    ? `Physical repair completed on-site (100%). Awaiting supervisor photo submission and municipal officer verification.`
-                    : progressNotes || `Repair progress updated to ${numProgress}%. Blockers: ${blockers?.length ? blockers.join(', ') : 'None'}`,
-                  by: supervisorProfile.name,
-                },
-              ],
-            };
-          }
-          return c;
-        })
-      );
-
-      // Notify officer if requested
-      if (notifyOfficer) {
-        pushNotification(
-          'officer',
-          'Field Repair Progress Update',
-          `Supervisor ${supervisorProfile.name} updated #${workOrderId} to ${numProgress}%. ${progressNotes ? `Note: "${progressNotes}"` : ''}`,
-          workOrderId,
-          'PROGRESS_UPDATE'
-        );
-      }
-    }
-
-    logAudit(
-      `${supervisorProfile.name} (Supervisor)`,
-      'UPDATE_PROGRESS',
-      `Work Order #${workOrderId}`,
-      `Progress updated to ${numProgress}%. Notes: ${progressNotes || 'None'}`
-    );
+    const order = workOrders.find((item) => item.id === workOrderId);
+    if (!order) return Promise.reject(new Error('Assigned work order not found.'));
+    return apiUpdateProgress(order.dbId || workOrderId, { progress, progressNotes, blockers, estimatedCompletionDate, notifyOfficer })
+      .then((result) => {
+        if (!result.success) throw new Error(result.error || 'Progress could not be saved.');
+        return loadSupervisorData(supervisorProfile);
+      });
   };
 
   // Report Delay (Section 9)
   const reportWorkOrderDelay = (workOrderId, { delayReason, revisedDeadline }) => {
-    const timestamp = nowString();
-    setWorkOrders((prev) =>
-      prev.map((wo) => {
-        if (wo.id === workOrderId) {
-          return {
-            ...wo,
-            status: 'OVERDUE',
-            deadline: revisedDeadline || wo.deadline,
-            delayReport: {
-              reportedDate: timestamp,
-              reason: delayReason,
-              revisedDeadline: revisedDeadline || wo.deadline,
-            },
-            siteNotes: [
-              { date: timestamp, text: `Delay Reported: ${delayReason}. New target: ${revisedDeadline}`, author: supervisorProfile.name },
-              ...(wo.siteNotes || []),
-            ],
-          };
-        }
-        return wo;
-      })
-    );
-
-    const wo = workOrders.find((w) => w.id === workOrderId);
-    if (wo) {
-      setComplaints((prev) =>
-        prev.map((c) => {
-          if (c.id === wo.complaintId) {
-            return {
-              ...c,
-              timeline: [
-                ...c.timeline,
-                {
-                  date: timestamp,
-                  title: 'Field Repair Delay Reported',
-                  description: `Delay reported: "${delayReason}". Revised target date: ${revisedDeadline}.`,
-                  by: supervisorProfile.name,
-                },
-              ],
-            };
-          }
-          return c;
-        })
-      );
-
-      // Alert officer
-      pushNotification(
-        'officer',
-        'Work Order Delay Alert',
-        `Supervisor ${supervisorProfile.name} reported delay on #${workOrderId}: "${delayReason}". Target revised to ${revisedDeadline}.`,
-        workOrderId,
-        'OVERDUE'
-      );
-    }
-
-    logAudit(
-      `${supervisorProfile.name} (Supervisor)`,
-      'REPORT_DELAY',
-      `Work Order #${workOrderId}`,
-      `Reason: ${delayReason}. New target: ${revisedDeadline}`
-    );
+    const order = workOrders.find((item) => item.id === workOrderId);
+    if (!order) return Promise.reject(new Error('Assigned work order not found.'));
+    return apiReportDelay(order.dbId || workOrderId, { delayReason, revisedDeadline })
+      .then((result) => {
+        if (!result.success) throw new Error(result.error || 'Delay report could not be saved.');
+        return loadSupervisorData(supervisorProfile);
+      });
   };
 
   // Add site notes
   const addWorkOrderSiteNotes = (workOrderId, noteText) => {
-    const timestamp = nowString();
-    setWorkOrders((prev) =>
-      prev.map((wo) => {
-        if (wo.id === workOrderId) {
-          return {
-            ...wo,
-            siteNotes: [{ date: timestamp, text: noteText, author: supervisorProfile.name }, ...(wo.siteNotes || [])],
-          };
-        }
-        return wo;
-      })
-    );
-    logAudit(`${supervisorProfile.name} (Supervisor)`, 'ADD_SITE_NOTE', `Work Order #${workOrderId}`, noteText);
+    const order = workOrders.find((item) => item.id === workOrderId);
+    if (!order) return Promise.reject(new Error('Assigned work order not found.'));
+    return addSupervisorSiteNote(order.dbId || workOrderId, noteText).then(() => loadSupervisorData(supervisorProfile));
   };
 
   // Submit Photo Evidence for Verification (Section 10)
-  const submitRepairEvidence = (workOrderId, { beforePhotos, afterPhotos, repairNotes, gpsCoordinates, manualLocation }) => {
+  const submitRepairEvidence = async (workOrderId, { beforePhotos, afterPhotos, repairNotes, gpsCoordinates, manualLocation }) => {
+    const order = workOrders.find((item) => item.id === workOrderId);
+    if (!order) return false;
+    const result = await apiSubmitPhotoEvidence({
+      workOrderId: order.dbId || workOrderId,
+      beforePhotos,
+      afterPhotos,
+      repairNotes: [repairNotes, gpsCoordinates, manualLocation].filter(Boolean).join('\n'),
+    });
+    if (!result.success) throw new Error(result.error || 'Photo evidence could not be saved.');
+    await loadSupervisorData(supervisorProfile);
+    return true;
+    /* Removed mock evidence path below.
     const timestamp = nowString();
     const wo = workOrders.find((w) => w.id === workOrderId);
     if (!wo) return false;
@@ -928,8 +980,8 @@ export function CivicProvider({ children }) {
 
     // Create or update Repair Verification entry in officer's verification queue
     const existingVerifIndex = verifications.findIndex((v) => v.workOrderId === workOrderId);
-    const primaryBefore = (beforePhotos && beforePhotos[0]) || wo.beforePhotos?.[0] || 'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=600&auto=format&fit=crop&q=80';
-    const primaryAfter = (afterPhotos && afterPhotos[0]) || 'https://images.unsplash.com/photo-1584467735815-f778f274e296?w=600&auto=format&fit=crop&q=80';
+    const primaryBefore = (beforePhotos && beforePhotos[0]) || wo.beforePhotos?.[0] || null;
+    const primaryAfter = (afterPhotos && afterPhotos[0]) || null;
 
     if (existingVerifIndex >= 0) {
       setVerifications((prev) =>
@@ -1006,11 +1058,20 @@ export function CivicProvider({ children }) {
     );
 
     return true;
+    */
   };
 
   // Material Inventory Tracking (Section 11)
   // Formula: Remaining = Received - Used - Returned
   const recordMaterialTransaction = ({ workOrderId, materialId, materialName, unit, type, quantity, reason }) => {
+    const order = workOrders.find((item) => item.id === workOrderId);
+    if (!order) return Promise.reject(new Error('Assigned work order not found.'));
+    return apiRecordMaterialTxn({ workOrderId: order.dbId || workOrderId, materialId, materialName, unit, type, quantity, reason })
+      .then((result) => {
+        if (!result.success) throw new Error(result.error || 'Material movement could not be saved.');
+        return loadSupervisorData(supervisorProfile);
+      });
+    /* Local-only implementation removed from supervisor workflow.
     const qty = parseInt(quantity);
     if (!qty || qty <= 0) {
       throw new Error('Transaction quantity must be a positive number greater than zero.');
@@ -1106,7 +1167,7 @@ export function CivicProvider({ children }) {
       `${type} ${qty} ${currentItem.unit} of ${currentItem.materialName}. Remaining: ${remainingQuantity}`
     );
 
-    return updatedItem;
+    return updatedItem; */
   };
 
   // Material Request Submission (Section 12)
@@ -1121,6 +1182,14 @@ export function CivicProvider({ children }) {
     shortageDescription,
     additionalNotes,
   }) => {
+    const order = workOrders.find((item) => item.id === workOrderId);
+    if (!order) return Promise.reject(new Error('Assigned work order not found.'));
+    return apiSubmitMaterialRequest({ workOrderId: order.dbId || workOrderId, materialName, requestedQty, unit, priority, reason, shortageDescription, additionalNotes })
+      .then((result) => {
+        if (!result.success) throw new Error(result.error || 'Material request could not be saved.');
+        return loadSupervisorData(supervisorProfile);
+      });
+    /* Local-only implementation removed from supervisor workflow.
     const qty = parseInt(requestedQty);
     if (!qty || qty <= 0) {
       throw new Error('Requested quantity must be greater than zero.');
@@ -1133,7 +1202,7 @@ export function CivicProvider({ children }) {
     const newRequest = {
       id: newReqId,
       workOrderId,
-      complaintId: complaintId || wo?.complaintId || 'CC-2026-1041',
+      complaintId: complaintId || wo?.complaintId || '',
       requestedBy: supervisorProfile.name,
       department: supervisorProfile.department,
       requestDate: timestamp,
@@ -1176,11 +1245,13 @@ export function CivicProvider({ children }) {
       `Requested ${qty} ${unit} of "${materialName}" for #${workOrderId}. Priority: ${priority}`
     );
 
-    return newRequest;
+    return newRequest; */
   };
 
   // Record received supplies when Officer approves request (Section 12)
   const receiveMaterialSupplies = (requestId) => {
+    return Promise.reject(new Error('Supplies appear after the municipal department records an inventory dispatch.'));
+    /* Local-only implementation removed from supervisor workflow.
     const req = materialRequests.find((r) => r.id === requestId);
     if (!req) return;
 
@@ -1212,10 +1283,19 @@ export function CivicProvider({ children }) {
       req.workOrderId,
       'SUPPLIES_RECEIVED'
     );
+    */
   };
 
   // Progress Reports (Section 13)
   const submitProgressReport = (reportData) => {
+    const order = workOrders.find((item) => item.id === reportData.workOrderId);
+    if (!order) return Promise.reject(new Error('Assigned work order not found.'));
+    return apiSubmitProgressReport({ ...reportData, workOrderId: order.dbId || reportData.workOrderId })
+      .then((result) => {
+        if (!result.success) throw new Error(result.error || 'Progress report could not be saved.');
+        return loadSupervisorData(supervisorProfile).then(() => ({ ...reportData, id: result.data.id, reportDateTime: result.data.createdAt, submittedBy: supervisorProfile.name }));
+      });
+    /* Local-only implementation removed from supervisor workflow.
     const newReportId = `PR-2026-${(progressReports.length + 20).toString().padStart(3, '0')}`;
     const timestamp = nowString();
 
@@ -1227,7 +1307,7 @@ export function CivicProvider({ children }) {
       workCompleted: reportData.workCompleted,
       currentProgress: parseInt(reportData.currentProgress) || 0,
       workersInvolved: reportData.workersInvolved || [],
-      materialsUsed: reportData.materialsUsed || 'Standard site materials',
+      materialsUsed: reportData.materialsUsed || '',
       remainingWork: reportData.remainingWork || 'None',
       problemsOrDelays: reportData.problemsOrDelays || 'None',
       photoEvidence: reportData.photoEvidence || [],
@@ -1253,7 +1333,7 @@ export function CivicProvider({ children }) {
       `Filed progress report for #${reportData.workOrderId}. Progress: ${newReport.currentProgress}%`
     );
 
-    return newReport;
+    return newReport; */
   };
 
   // Notification actions
@@ -1417,6 +1497,9 @@ export function CivicProvider({ children }) {
         // Common & State
         currentRole,
         setCurrentRole,
+        loadSupervisorData,
+        supervisorDataReady,
+        supervisorDataError,
         citizenProfile,
         setCitizenProfile,
         officerProfile,

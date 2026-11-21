@@ -169,7 +169,7 @@ export function LoginPage({ initialMode = 'login' }) {
       case 'OFFICER':
         return '/officer';
       case 'SUPERVISOR':
-        return '/field-officer-unavailable';
+        return '/supervisor';
       case 'ADMIN':
         return '/admin';
       case 'SUPPLIER':

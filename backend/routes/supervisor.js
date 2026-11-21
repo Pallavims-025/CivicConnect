@@ -1,10 +1,17 @@
 import { Router } from 'express';
+import { authenticate, authorize } from '../middleware/auth.js';
 import {
   getSupervisorProfile,
+  getSupervisorDashboardData,
+  updateSupervisorProfile,
+  updateWorkOrderCrew,
+  addWorkOrderNote,
   getSupervisorWorkOrders,
   updateProgress,
   reportDelay,
   createWorkerTask,
+  updateWorkerTask,
+  deleteWorkerTask,
   recordMaterialMovement,
   submitMaterialRequisition,
   submitPhotoEvidence,
@@ -13,8 +20,14 @@ import {
 
 const router = Router();
 
+router.use(authenticate, authorize('SUPERVISOR'));
+
 // GET /api/supervisor/profile
 router.get('/profile', getSupervisorProfile);
+router.put('/profile', updateSupervisorProfile);
+router.get('/dashboard-data', getSupervisorDashboardData);
+router.put('/work-orders/:id/crew', updateWorkOrderCrew);
+router.post('/work-orders/:id/notes', addWorkOrderNote);
 
 // GET /api/supervisor/work-orders
 router.get('/work-orders', getSupervisorWorkOrders);
@@ -27,6 +40,8 @@ router.post('/work-orders/:id/delay', reportDelay);
 
 // POST /api/supervisor/worker-tasks
 router.post('/worker-tasks', createWorkerTask);
+router.put('/worker-tasks/:id', updateWorkerTask);
+router.delete('/worker-tasks/:id', deleteWorkerTask);
 
 // POST /api/supervisor/materials/transaction
 router.post('/materials/transaction', recordMaterialMovement);

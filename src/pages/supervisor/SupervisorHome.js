@@ -31,7 +31,7 @@ export function SupervisorHome() {
     workOrders,
     workerTasks,
     workers,
-    siteMaterials,
+    inventory,
     materialRequests,
     verifications,
     complaints,
@@ -51,20 +51,18 @@ export function SupervisorHome() {
   const [assignTaskDesc, setAssignTaskDesc] = useState('');
   const [assignDeadline, setAssignDeadline] = useState('');
 
-  const [progressVal, setProgressVal] = useState(50);
+  const [progressVal, setProgressVal] = useState(0);
   const [progressNotes, setProgressNotes] = useState('');
   const [progressBlockers, setProgressBlockers] = useState('');
 
   const [matName, setMatName] = useState('');
   const [matQty, setMatQty] = useState('');
-  const [matUnit, setMatUnit] = useState('Bags');
+  const [matUnit, setMatUnit] = useState('Units');
   const [matPriority, setMatPriority] = useState('MEDIUM');
   const [matReason, setMatReason] = useState('');
 
   // Supervisor Work Orders
-  const myWorkOrders = workOrders.filter(
-    (w) => !w.supervisor || w.supervisor.toLowerCase().includes('rao') || w.supervisor.toLowerCase().includes('supervisor')
-  );
+  const myWorkOrders = workOrders;
 
   // Dynamic Calculated Metrics (Section 6)
   const totalAssignedWO = myWorkOrders.length;
@@ -72,7 +70,7 @@ export function SupervisorHome() {
   const completedTasksCount = workerTasks.filter((t) => t.status === 'Completed').length;
   const delayedTasksCount = myWorkOrders.filter((w) => w.status === 'OVERDUE' || w.status === 'REWORK_REQUIRED').length;
   const activeWorkersCount = workers.filter((w) => w.status === 'ACTIVE').length;
-  const lowStockCount = siteMaterials.filter((m) => m.remainingQuantity <= 3).length;
+  const lowStockCount = inventory.filter((item) => item.availableQuantity <= item.minThreshold).length;
   const pendingRequestsCount = materialRequests.filter(
     (m) => m.status === 'Pending Approval' || m.status === 'PENDING'
   ).length;
@@ -97,67 +95,82 @@ export function SupervisorHome() {
     .filter((m) => m.status === 'Pending Approval' || m.status === 'PENDING')
     .slice(0, 3);
 
-  const lowStockAlerts = siteMaterials.filter((m) => m.remainingQuantity <= 3).slice(0, 4);
+  const lowStockAlerts = inventory
+    .filter((item) => item.availableQuantity <= item.minThreshold)
+    .slice(0, 4)
+    .map((item) => ({ materialName: item.name, remainingQuantity: item.availableQuantity, unit: item.unit }));
 
   // Handlers for Quick Action Modals
-  const handleAssignWorkerSubmit = (e) => {
+  const handleAssignWorkerSubmit = async (e) => {
     e.preventDefault();
     if (!selectedWO || !assignWorkerId || !assignTaskDesc) {
       alert('Please fill out all task assignment fields.');
       return;
     }
     const targetWO = myWorkOrders.find((w) => w.id === selectedWO);
-    addWorkerTask({
+    try {
+      await addWorkerTask({
       workOrderId: selectedWO,
       complaintId: targetWO?.complaintId || '',
-      workerId: assignWorkerId,
+      workerName: assignWorkerId,
       taskDescription: assignTaskDesc,
-      deadline: assignDeadline || targetWO?.deadline || '2026-10-25',
-    });
-    setShowAssignModal(false);
-    setAssignTaskDesc('');
-    alert('Worker task successfully scheduled!');
+      deadline: assignDeadline || targetWO?.deadline || '',
+      });
+      setShowAssignModal(false);
+      setAssignTaskDesc('');
+      alert('Worker assignment saved.');
+    } catch (error) {
+      alert(error.message || 'Worker assignment could not be saved.');
+    }
   };
 
-  const handleUpdateProgressSubmit = (e) => {
+  const handleUpdateProgressSubmit = async (e) => {
     e.preventDefault();
     if (!selectedWO) {
       alert('Please select a work order.');
       return;
     }
-    updateWorkOrderProgress(selectedWO, {
+    try {
+      await updateWorkOrderProgress(selectedWO, {
       progress: progressVal,
       progressNotes,
       blockers: progressBlockers ? [progressBlockers] : [],
       notifyOfficer: true,
-    });
-    setShowProgressModal(false);
-    setProgressNotes('');
-    setProgressBlockers('');
-    alert('Progress updated and municipal officer alerted!');
+      });
+      setShowProgressModal(false);
+      setProgressNotes('');
+      setProgressBlockers('');
+      alert('Progress was saved.');
+    } catch (error) {
+      alert(error.message || 'Progress could not be saved.');
+    }
   };
 
-  const handleMaterialRequestSubmit = (e) => {
+  const handleMaterialRequestSubmit = async (e) => {
     e.preventDefault();
     if (!selectedWO || !matName || !matQty) {
       alert('Please specify work order, material name, and quantity.');
       return;
     }
     const targetWO = myWorkOrders.find((w) => w.id === selectedWO);
-    submitSupervisorMaterialRequest({
+    try {
+      await submitSupervisorMaterialRequest({
       workOrderId: selectedWO,
       complaintId: targetWO?.complaintId,
       materialName: matName,
       requestedQty: matQty,
       unit: matUnit,
       priority: matPriority,
-      reason: matReason || 'Site repair replenishment',
-    });
-    setShowMaterialModal(false);
-    setMatName('');
-    setMatQty('');
-    setMatReason('');
-    alert('Material requisition submitted to Municipal Officer queue!');
+      reason: matReason,
+      });
+      setShowMaterialModal(false);
+      setMatName('');
+      setMatQty('');
+      setMatReason('');
+      alert('Material request submitted.');
+    } catch (error) {
+      alert(error.message || 'Material request could not be submitted.');
+    }
   };
 
   return (
@@ -176,9 +189,15 @@ export function SupervisorHome() {
           <p className="text-blue-100 text-xs md:text-sm mt-1 max-w-xl">
             On-site field operations management. Track assigned repairs, dispatch specialized field workers, manage site inventory, and submit photo verification.
           </p>
-        </div>
+      </div>
 
-        {/* Quick-Action Buttons (Section 6) */}
+      {myWorkOrders.length === 0 && (
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 text-sm font-medium text-blue-900">
+          No work orders assigned yet.
+        </div>
+      )}
+
+      {/* Quick-Action Buttons (Section 6) */}
         <div className="flex flex-wrap items-center gap-2.5 shrink-0">
           <button
             onClick={() => {
@@ -401,7 +420,7 @@ export function SupervisorHome() {
                   <Briefcase className="w-4 h-4 text-civic-blue" />
                   <span>Recent Assigned Work Orders</span>
                 </h3>
-                <p className="text-xs text-slate-500">Assigned by Municipal Officers for Ward 14 Indiranagar</p>
+                <p className="text-xs text-slate-500">Assigned by municipal officers to your account</p>
               </div>
               <button
                 onClick={() => navigate('/supervisor/work-orders')}
@@ -556,7 +575,7 @@ export function SupervisorHome() {
                   <div className="grid grid-cols-2 gap-2">
                     <div className="relative rounded-lg overflow-hidden h-24 bg-slate-200">
                       <img
-                        src={wo.beforePhotos?.[0] || 'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=300&auto=format&fit=crop&q=80'}
+                        src={wo.beforePhotos?.[0]}
                         alt="Before"
                         className="w-full h-full object-cover"
                       />
@@ -748,19 +767,15 @@ export function SupervisorHome() {
 
               <div>
                 <label className="font-bold text-slate-700 block mb-1">Select Field Specialist *</label>
-                <select
+                <input
+                  type="text"
+                  maxLength={255}
                   value={assignWorkerId}
                   onChange={(e) => setAssignWorkerId(e.target.value)}
+                  placeholder="Enter assigned worker name"
                   className="w-full p-2.5 rounded-xl border border-slate-200 text-xs font-semibold focus:ring-2 focus:ring-civic-blue"
                   required
-                >
-                  <option value="">-- Choose Worker from Roster --</option>
-                  {workers.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.name} ({w.role}) - {w.status}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
 
               <div>
@@ -938,14 +953,18 @@ export function SupervisorHome() {
 
               <div>
                 <label className="font-bold text-slate-700 block mb-1">Material Name *</label>
-                <input
-                  type="text"
+                <select
                   value={matName}
-                  onChange={(e) => setMatName(e.target.value)}
-                  placeholder="e.g. Cold-Mix Asphalt Bags (50kg), LED Luminaire 65W"
-                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-amber-500"
+                  onChange={(e) => {
+                    setMatName(e.target.value);
+                    setMatUnit(inventory.find((item) => item.name === e.target.value)?.unit || 'Units');
+                  }}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs font-semibold focus:ring-2 focus:ring-amber-500"
                   required
-                />
+                >
+                  <option value="">Choose department inventory material</option>
+                  {inventory.map((item) => <option key={item.id} value={item.name}>{item.name} ({item.availableQuantity} {item.unit})</option>)}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
