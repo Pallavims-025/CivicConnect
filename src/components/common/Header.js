@@ -1,10 +1,16 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Bell,
   CheckCircle2,
   AlertTriangle,
+  User,
+  Shield,
   Layers,
+  ChevronDown,
   Menu,
+  HardHat,
+  Settings,
 } from 'lucide-react';
 import { useCivic } from '../../context/CivicContext';
 import { useAuth } from '../../context/AuthContext';
@@ -12,22 +18,79 @@ import { useAuth } from '../../context/AuthContext';
 export function Header({ title, onToggleMobileSidebar }) {
   const {
     currentRole,
+    setCurrentRole,
     citizenProfile,
     officerProfile,
+    supervisorProfile,
     notifications,
     markNotificationRead,
     markAllNotificationsRead,
   } = useCivic();
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   const [showNotifications, setShowNotifications] = useState(false);
-  const relevantNotifications = notifications.filter(
+  const [showRoleMenu, setShowRoleMenu] = useState(false);
+
+  const relevantNotifications = (notifications || []).filter(
     (n) => n.role === currentRole
   );
   const unreadCount = relevantNotifications.filter((n) => !n.read).length;
 
-  const activeUser = user || (currentRole === 'citizen' ? citizenProfile : officerProfile);
-  const roleLabel = user?.role === 'ADMIN' ? 'Administrator' : user?.role === 'OFFICER' ? 'Municipal Officer' : user?.role === 'SUPERVISOR' ? 'Field Officer' : 'Citizen';
+  const handleRoleSwitch = (newRole) => {
+    setCurrentRole(newRole);
+    setShowRoleMenu(false);
+    if (newRole === 'citizen') {
+      navigate('/citizen');
+    } else if (newRole === 'officer') {
+      navigate('/officer');
+    } else if (newRole === 'supervisor') {
+      navigate('/supervisor');
+    } else if (newRole === 'admin') {
+      navigate('/admin');
+    }
+  };
+
+  let activeUser = citizenProfile;
+  let roleDisplayName = 'Citizen';
+  let portalSubtitle = 'Citizen Portal';
+
+  if (currentRole === 'officer') {
+    activeUser = officerProfile;
+    roleDisplayName = 'Officer';
+    portalSubtitle = 'Municipal Operations Command';
+  } else if (currentRole === 'supervisor') {
+    activeUser = supervisorProfile;
+    roleDisplayName = 'Supervisor';
+    portalSubtitle = 'Field Operations & Supervision';
+  } else if (currentRole === 'admin') {
+    activeUser = {
+      name: user?.name || 'Super Admin',
+      avatarUrl: user?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+      title: user?.title || 'System Administrator',
+      department: 'IT Administration',
+    };
+    roleDisplayName = 'Admin';
+    portalSubtitle = 'System Administration';
+  }
+
+  // If user object from auth is present and matches current role, overlay profile details
+  if (user) {
+    const roleMatches =
+      (user.role === 'CITIZEN' && currentRole === 'citizen') ||
+      (user.role === 'OFFICER' && currentRole === 'officer') ||
+      (user.role === 'SUPERVISOR' && currentRole === 'supervisor') ||
+      (user.role === 'ADMIN' && currentRole === 'admin');
+    if (roleMatches) {
+      activeUser = {
+        ...activeUser,
+        name: user.name || activeUser?.name,
+        email: user.email || activeUser?.email,
+        avatarUrl: user.avatarUrl || activeUser?.avatarUrl,
+        department: user.department?.name || user.department || activeUser?.department,
+      };
+    }
+  }
 
   return (
     <header className="h-16 bg-white border-b border-slate-200 px-4 md:px-8 flex items-center justify-between sticky top-0 z-30 shadow-xs">
@@ -46,10 +109,12 @@ export function Header({ title, onToggleMobileSidebar }) {
           </h1>
           <div className="flex items-center space-x-2 text-xs text-civic-muted">
             <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-50 text-civic-blue font-medium text-[11px] border border-blue-200">
-              Municipal Grievance System
+              CivicConnect Platform
             </span>
             <span className="hidden sm:inline">•</span>
-            <span className="hidden sm:inline">{roleLabel} Portal</span>
+            <span className="hidden sm:inline text-slate-600 font-medium">
+              {portalSubtitle}
+            </span>
           </div>
         </div>
       </div>
@@ -57,18 +122,97 @@ export function Header({ title, onToggleMobileSidebar }) {
       <div className="flex items-center space-x-3 md:space-x-4">
         {/* DEMO ROLE SWITCHER */}
         <div className="relative">
-          <div className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-300 shadow-xs">
+          <button
+            onClick={() => setShowRoleMenu(!showRoleMenu)}
+            className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors border border-slate-300 shadow-xs cursor-pointer"
+            title="Switch between Citizen, Officer, Supervisor, and Admin view"
+          >
             <Layers className="w-3.5 h-3.5 text-civic-blue" />
             <span className="hidden sm:inline">Role:</span>
-            <span className="text-civic-blue font-bold">{roleLabel}</span>
-          </div>
+            <span className="text-civic-blue font-bold">
+              {roleDisplayName}
+            </span>
+            <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+          </button>
+
+          {showRoleMenu && (
+            <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50">
+              <div className="px-3 py-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                Select Interactive View
+              </div>
+
+              <button
+                onClick={() => handleRoleSwitch('citizen')}
+                className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer ${
+                  currentRole === 'citizen' ? 'bg-blue-50/70 font-semibold text-civic-blue' : 'text-slate-700'
+                }`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <User className="w-4 h-4 text-blue-600" />
+                  <div>
+                    <p className="font-semibold text-slate-900">Citizen Dashboard</p>
+                    <p className="text-[11px] text-slate-400">Public grievance reporting & tracking</p>
+                  </div>
+                </div>
+                {currentRole === 'citizen' && <span className="w-2 h-2 rounded-full bg-civic-blue"></span>}
+              </button>
+
+              <button
+                onClick={() => handleRoleSwitch('officer')}
+                className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer ${
+                  currentRole === 'officer' ? 'bg-blue-50/70 font-semibold text-civic-blue' : 'text-slate-700'
+                }`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <Shield className="w-4 h-4 text-amber-600" />
+                  <div>
+                    <p className="font-semibold text-slate-900">Municipal Operations Staff</p>
+                    <p className="text-[11px] text-slate-400">Verification, triage, assignment</p>
+                  </div>
+                </div>
+                {currentRole === 'officer' && <span className="w-2 h-2 rounded-full bg-civic-blue"></span>}
+              </button>
+
+              <button
+                onClick={() => handleRoleSwitch('supervisor')}
+                className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer ${
+                  currentRole === 'supervisor' ? 'bg-blue-50/70 font-semibold text-civic-blue' : 'text-slate-700'
+                }`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <HardHat className="w-4 h-4 text-amber-500" />
+                  <div>
+                    <p className="font-semibold text-slate-900">Field Supervisor Dashboard</p>
+                    <p className="text-[11px] text-slate-400">Crew, repair progress, materials, photos</p>
+                  </div>
+                </div>
+                {currentRole === 'supervisor' && <span className="w-2 h-2 rounded-full bg-civic-blue"></span>}
+              </button>
+
+              <button
+                onClick={() => handleRoleSwitch('admin')}
+                className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer ${
+                  currentRole === 'admin' ? 'bg-blue-50/70 font-semibold text-civic-blue' : 'text-slate-700'
+                }`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <Settings className="w-4 h-4 text-purple-600" />
+                  <div>
+                    <p className="font-semibold text-slate-900">System Administrator</p>
+                    <p className="text-[11px] text-slate-400">Master configuration & audit</p>
+                  </div>
+                </div>
+                {currentRole === 'admin' && <span className="w-2 h-2 rounded-full bg-civic-blue"></span>}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* NOTIFICATION BELL */}
         <div className="relative">
           <button
             onClick={() => setShowNotifications(!showNotifications)}
-            className="relative p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors focus:outline-hidden"
+            className="relative p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors focus:outline-hidden cursor-pointer"
             aria-label="View notifications"
           >
             <Bell className="w-5 h-5" />
@@ -85,7 +229,7 @@ export function Header({ title, onToggleMobileSidebar }) {
                 <div className="flex items-center space-x-1.5">
                   <span className="font-bold text-sm text-slate-800">Notifications</span>
                   {unreadCount > 0 && (
-                    <span className="px-1.5 py-0.2 bg-blue-100 text-blue-800 text-[10px] font-bold rounded-full">
+                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-bold rounded-full">
                       {unreadCount} new
                     </span>
                   )}
@@ -93,7 +237,7 @@ export function Header({ title, onToggleMobileSidebar }) {
                 {unreadCount > 0 && (
                   <button
                     onClick={markAllNotificationsRead}
-                    className="text-xs text-civic-blue hover:underline font-medium"
+                    className="text-xs text-civic-blue hover:underline font-medium cursor-pointer"
                   >
                     Mark all read
                   </button>
@@ -117,7 +261,7 @@ export function Header({ title, onToggleMobileSidebar }) {
                       <div className="flex items-start justify-between">
                         <p className="font-semibold text-slate-800">{n.title}</p>
                         <span className="text-[10px] text-slate-400 whitespace-nowrap ml-2">
-                          {n.timestamp.split(' ')[1]}
+                          {n.timestamp ? (n.timestamp.includes(' ') ? n.timestamp.split(' ')[1] : n.timestamp) : ''}
                         </span>
                       </div>
                       <p className="text-slate-600 mt-0.5 line-clamp-2">{n.message}</p>
@@ -132,16 +276,16 @@ export function Header({ title, onToggleMobileSidebar }) {
         {/* USER PROFILE SNIPPET */}
         <div className="flex items-center space-x-2 pl-2 border-l border-slate-200">
           <img
-            src={activeUser.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'}
-            alt={activeUser.name}
+            src={activeUser?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'}
+            alt={activeUser?.name || 'User'}
             className="w-8 h-8 rounded-full object-cover ring-2 ring-slate-200"
           />
           <div className="hidden lg:block text-left">
             <p className="text-xs font-semibold text-slate-800 leading-tight">
-              {activeUser.name}
+              {activeUser?.name || 'User'}
             </p>
             <p className="text-[11px] text-slate-500 leading-tight">
-              {roleLabel}
+              {activeUser?.department || roleDisplayName}
             </p>
           </div>
         </div>
