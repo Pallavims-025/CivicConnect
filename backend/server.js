@@ -4,10 +4,17 @@ import cors from 'cors';
 import apiRoutes from './routes/index.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { prisma } from './lib/prisma.js';
+import { ensureConfiguredAdmin, hasAdminConfig } from './lib/adminBootstrap.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 const CLIENT_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
+
+if (hasAdminConfig()) {
+  const result = await ensureConfiguredAdmin(prisma);
+  if (result.created) console.log('[CivicConnect Backend] Configured administrator account initialized.');
+  else if (result.repaired) console.log('[CivicConnect Backend] Configured administrator account password initialized.');
+}
 
 // Middleware
 app.use(
@@ -27,7 +34,7 @@ app.use(
   })
 );
 
-app.use(express.json());
+app.use(express.json({ limit: '45mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Root welcome endpoint

@@ -10,6 +10,7 @@ import {
 import { useCivic } from '../../context/CivicContext';
 import { createComplaint as createComplaintRequest, getComplaintCategories } from '../../services/api';
 import { PlaceAutocomplete, LocationMap, reverseGeocodeLocation } from '../../components/common/LocationMap';
+import { perceptualHashFromImage } from '../../utils/perceptualHash';
 
 export function ReportIssue() {
   const navigate = useNavigate();
@@ -97,10 +98,19 @@ export function ReportIssue() {
   };
 
   const handleAddPhotoUrl = () => {
-    if (photoInputUrl.trim()) {
-      setPhotos((prev) => [...prev, photoInputUrl.trim()]);
-      setPhotoInputUrl('');
+    const nextUrl = photoInputUrl.trim();
+    if (!nextUrl) return;
+    if (photos.length >= 5) {
+      setErrors((current) => ({ ...current, photos: 'A complaint can include up to 5 photos.' }));
+      return;
     }
+    const duplicate = photos.some((photo) => {
+      try { const old = new URL(photo); const next = new URL(nextUrl); old.hash = ''; next.hash = ''; return old.toString() === next.toString(); }
+      catch { return photo === nextUrl; }
+    });
+    if (!duplicate) setPhotos((previous) => [...previous, nextUrl]);
+    setErrors((current) => ({ ...current, photos: undefined }));
+    setPhotoInputUrl('');
   };
 
   const handleRemovePhoto = (index) => {
@@ -109,14 +119,21 @@ export function ReportIssue() {
 
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
+    e.target.value = '';
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
         alert('File size exceeds 5MB limit.');
         return;
       }
+      if (photos.length >= 5) {
+        setErrors((current) => ({ ...current, photos: 'A complaint can include up to 5 photos.' }));
+        return;
+      }
       const reader = new FileReader();
       reader.onload = (event) => {
-        setPhotos((prev) => [...prev, event.target.result]);
+        const image = event.target.result;
+        setPhotos((prev) => prev.includes(image) ? prev : [...prev, image]);
+        setErrors((current) => ({ ...current, photos: undefined }));
       };
       reader.readAsDataURL(file);
     }
@@ -146,12 +163,16 @@ export function ReportIssue() {
 
     setSubmitting(true);
     try {
+      const photosWithHashes = await Promise.all(photos.map(async (imageUrl) => ({
+        imageUrl,
+        perceptualHash: await perceptualHashFromImage(imageUrl),
+      })));
       const record = await createComplaintRequest({
         title, categoryId: Number(categoryId), description, address,
         latitude: location.lat, longitude: location.lng,
-        photos: photos.filter((photo) => typeof photo === 'string' && photo.length <= 1000 && /^https?:\/\//i.test(photo)),
+        photos: photosWithHashes,
       });
-      const newComplaint = submitComplaint({ ...record, photos });
+      const newComplaint = submitComplaint(record);
       setSubmittedData(newComplaint);
     } catch (error) {
       setErrors(error.details && Object.keys(error.details).length ? error.details : { submit: error.message });
@@ -366,7 +387,7 @@ export function ReportIssue() {
               <span className="text-[10px] text-slate-400">JPG, PNG up to 5MB</span>
               <input
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp,image/gif"
                 onChange={handleFileUpload}
                 className="hidden"
               />
@@ -389,6 +410,7 @@ export function ReportIssue() {
               Add URL
             </button>
           </div>
+          {errors.photos && <p className="text-[11px] text-rose-600 mt-2" role="alert">{errors.photos}</p>}
         </div>
 
         {/* Submit Button */}

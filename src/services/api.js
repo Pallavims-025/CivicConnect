@@ -7,6 +7,14 @@
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || '/api';
 
+function authHeaders(extra = {}) {
+  const token = localStorage.getItem('cc_auth_token');
+  return {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...extra,
+  };
+}
+
 async function request(path, options = {}) {
   const token = localStorage.getItem('cc_auth_token');
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -33,6 +41,30 @@ export const createComplaint = (complaint) => request('/complaints', {
   body: JSON.stringify(complaint),
 });
 export const getOfficerMapComplaints = () => request('/complaints/officer-map');
+export const getOfficerComplaints = () => request('/complaints/officer');
+export const getOfficerComplaint = (id) => request(`/complaints/officer/${encodeURIComponent(id)}`);
+export const updateOfficerComplaintStatus = (id, update) => request(`/complaints/${encodeURIComponent(id)}/status`, {
+  method: 'PATCH',
+  body: JSON.stringify(update),
+});
+export const getActiveFieldSupervisors = () => request('/assignments/supervisors');
+export const assignComplaintToSupervisor = (complaintId, assignment) => request(`/assignments/complaints/${encodeURIComponent(complaintId)}`, {
+  method: 'POST',
+  body: JSON.stringify(assignment),
+});
+export const getOfficerAssignments = () => request('/assignments/officer');
+export const getMyAssignments = () => request('/assignments/mine');
+export const updateAssignmentStatus = (id, update) => request(`/assignments/${encodeURIComponent(id)}/status`, { method: 'PATCH', body: JSON.stringify(update) });
+export const submitAssignmentCompletion = (id, completion) => request(`/assignments/${encodeURIComponent(id)}/complete`, { method: 'POST', body: JSON.stringify(completion) });
+export const getPendingVerifications = () => request('/assignments/verifications');
+export const reviewAssignmentCompletion = (id, review) => request(`/assignments/verifications/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(review) });
+export const getNotifications = () => request('/assignments/notifications');
+export const markNotificationReadRequest = (id) => request(`/assignments/notifications/${encodeURIComponent(id)}/read`, { method: 'PATCH' });
+export const getDuplicateReviews = () => request('/complaints/officer/duplicates');
+export const reviewDuplicate = (matchId, decision, matchedComplaintId) => request(`/complaints/officer/duplicates/${encodeURIComponent(matchId)}`, {
+  method: 'PATCH',
+  body: JSON.stringify({ decision, matchedComplaintId }),
+});
 
 /**
  * Checks backend health and database connectivity
@@ -65,7 +97,7 @@ export async function checkBackendHealth() {
  */
 export async function fetchAdminStats() {
   try {
-    const res = await fetch(`${API_BASE_URL}/admin/stats`);
+    const res = await fetch(`${API_BASE_URL}/admin/stats`, { headers: authHeaders() });
     const json = await res.json();
     return { ok: res.ok, data: json.data };
   } catch (err) {
@@ -78,7 +110,7 @@ export async function fetchAdminStats() {
  */
 export async function fetchAdminUsers() {
   try {
-    const res = await fetch(`${API_BASE_URL}/admin/users`);
+    const res = await fetch(`${API_BASE_URL}/admin/users`, { headers: authHeaders() });
     const json = await res.json();
     return { ok: res.ok, data: json.data };
   } catch (err) {
@@ -93,7 +125,7 @@ export async function createAdminUser(userData) {
   try {
     const res = await fetch(`${API_BASE_URL}/admin/users`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(userData),
     });
     const json = await res.json();
@@ -110,7 +142,7 @@ export async function updateAdminUser(userId, updatedFields) {
   try {
     const res = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(updatedFields),
     });
     const json = await res.json();
@@ -127,6 +159,7 @@ export async function deleteAdminUser(userId) {
   try {
     const res = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
       method: 'DELETE',
+      headers: authHeaders(),
     });
     const json = await res.json();
     return { ok: res.ok, message: json.message };
@@ -140,7 +173,7 @@ export async function deleteAdminUser(userId) {
  */
 export async function fetchAdminDepartments() {
   try {
-    const res = await fetch(`${API_BASE_URL}/admin/departments`);
+    const res = await fetch(`${API_BASE_URL}/admin/departments`, { headers: authHeaders() });
     const json = await res.json();
     return { ok: res.ok, data: json.data };
   } catch (err) {
@@ -155,7 +188,7 @@ export async function createAdminDepartment(deptData) {
   try {
     const res = await fetch(`${API_BASE_URL}/admin/departments`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(deptData),
     });
     const json = await res.json();
@@ -170,7 +203,7 @@ export async function createAdminDepartment(deptData) {
  */
 export async function fetchAdminAuditLogs(limit = 20) {
   try {
-    const res = await fetch(`${API_BASE_URL}/admin/audit?limit=${limit}`);
+    const res = await fetch(`${API_BASE_URL}/admin/audit?limit=${limit}`, { headers: authHeaders() });
     const json = await res.json();
     return { ok: res.ok, data: json.data };
   } catch (err) {

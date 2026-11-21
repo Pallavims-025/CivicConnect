@@ -87,6 +87,11 @@ export function AuthProvider({ children }) {
 
     // Graceful offline demo fallback if backend is unreachable
     if (status === 0) {
+      // Supervisor accounts must be registered and approved in the database;
+      // never fabricate a local account that cannot receive real assignments.
+      if (role === 'SUPERVISOR') {
+        return { success: false, errors: { general: 'Field Supervisor registration requires the CivicConnect API server.' } };
+      }
       const demoUser = {
         id: `usr-demo-${Date.now().toString().slice(-4)}`,
         name: name || 'Demo User',
@@ -132,14 +137,21 @@ export function AuthProvider({ children }) {
     // Graceful offline demo fallback if API server is not running on port 5000:
     // Allows seamless testing and review of all dashboards without blocking
     if (status === 0) {
-      const demoRole = role || 'ADMIN';
+      // A supervisor dashboard must always correspond to a real database user
+      // so assignments remain private and correctly scoped by the user ID.
+      if (role === 'SUPERVISOR') {
+        return { success: false, errors: { general: 'Field Supervisor sign-in requires the CivicConnect API server.' } };
+      }
+      // Administrator sessions must always be backed by a real API token.
+      if (role === 'ADMIN') {
+        return { success: false, errors: { general: 'Unable to reach the CivicConnect API server.' } };
+      }
+      const demoRole = role || 'CITIZEN';
       const demoName =
         demoRole === 'ADMIN'
           ? 'Santosh (Admin)'
           : demoRole === 'OFFICER'
           ? 'Dr. Aruna Rao (Municipal Officer)'
-          : demoRole === 'SUPERVISOR'
-          ? 'Rajesh Kumar (Field Officer)'
           : 'Priya Sharma (Citizen)';
 
       const demoUser = {

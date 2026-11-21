@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { authenticate, authorize } from '../middleware/auth.js';
 import {
   getUsers,
   createUser,
@@ -13,6 +14,9 @@ import {
 } from '../controllers/adminController.js';
 
 const router = Router();
+
+// Protect every administrator API, including future routes added below.
+router.use(authenticate, authorize('ADMIN'));
 
 // Platform Telemetry & Stats
 router.get('/stats', getAdminStats);

@@ -121,10 +121,16 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
     { label: 'Profile', path: '/supervisor/profile', icon: User },
   ];
 
+  const supervisorNav = [
+    { label: 'My Assigned Work', path: '/supervisor', icon: Briefcase },
+    { label: 'Notifications', path: '/supervisor/notifications', icon: Bell },
+  ];
+
   let items = citizenNav;
   if (role === 'officer') items = officerNav;
   else if (role === 'supervisor') items = supervisorNav;
   else if (role === 'admin') items = adminNav;
+  else if (role === 'supervisor') items = supervisorNav;
 
   const handleRoleToggle = () => {
     const sequence = ['citizen', 'officer', 'supervisor', 'admin'];

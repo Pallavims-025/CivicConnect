@@ -65,7 +65,8 @@ async function main() {
   }
   await prisma.category.updateMany({ where: { id: { notIn: [...retainedIds] } }, data: { isActive: false } });
 
-  // Also seed a default demo citizen and administrator if none exist
+  // Also seed a default demo citizen if none exists. Administrators are
+  // initialized only from ADMIN_EMAIL and ADMIN_PASSWORD by adminBootstrap.
   const citizen = await prisma.user.upsert({
     where: { email: 'priya.sharma@civicmail.in' },
     update: {},
@@ -76,17 +77,6 @@ async function main() {
     },
   });
   console.log(`✓ Demo Citizen verified [ID: ${citizen.id}]: ${citizen.name}`);
-
-  const admin = await prisma.user.upsert({
-    where: { email: 'admin@municipality.gov.in' },
-    update: {},
-    create: {
-      name: 'Municipal Administrator',
-      email: 'admin@municipality.gov.in',
-      role: 'ADMIN',
-    },
-  });
-  console.log(`✓ Demo Administrator verified [ID: ${admin.id}]: ${admin.name}`);
 
   console.log('--- Seeding Completed Successfully ---');
 }

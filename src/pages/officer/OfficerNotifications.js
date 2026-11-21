@@ -14,6 +14,7 @@ import { useCivic } from '../../context/CivicContext';
 export function OfficerNotifications() {
   const navigate = useNavigate();
   const {
+    currentRole,
     notifications,
     markNotificationRead,
     markAllNotificationsRead,
@@ -21,7 +22,7 @@ export function OfficerNotifications() {
 
   const [filter, setFilter] = useState('ALL'); // 'ALL' | 'UNREAD'
 
-  const officerNotifs = notifications.filter((n) => n.role === 'officer');
+  const officerNotifs = notifications.filter((n) => n.role === currentRole);
   const filtered = officerNotifs.filter((n) => (filter === 'UNREAD' ? !n.read : true));
   const unreadCount = officerNotifs.filter((n) => !n.read).length;
 
@@ -107,13 +108,9 @@ export function OfficerNotifications() {
                   onClick={(e) => {
                     e.stopPropagation();
                     markNotificationRead(n.id);
-                    if (n.linkId.startsWith('CC-')) {
-                      navigate('/officer/complaints');
-                    } else if (n.linkId.startsWith('WO-')) {
-                      navigate('/officer/work-orders');
-                    } else if (n.linkId.startsWith('RV-')) {
-                      navigate('/officer/verifications');
-                    }
+                    if (currentRole === 'supervisor') navigate('/supervisor');
+                    else if (n.workOrderId) navigate(n.title.toLowerCase().includes('verification') || n.title.toLowerCase().includes('completed') ? '/officer/verifications' : '/officer/work-orders');
+                    else if (n.complaintId || n.linkId) navigate('/officer/complaints');
                   }}
                   className="px-3 py-1 bg-slate-100 hover:bg-civic-blue hover:text-white rounded-lg font-bold text-xs text-slate-700 transition-colors whitespace-nowrap self-center"
                 >

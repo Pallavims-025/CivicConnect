@@ -851,52 +851,7 @@ export const INITIAL_REPAIR_VERIFICATIONS = [
   },
 ];
 
-export const INITIAL_DUPLICATES = [
-  {
-    id: 'DUP-2026-01',
-    originalComplaintId: 'CC-2026-1041',
-    originalTitle: 'Severe pothole cluster near Metro Pillar 142',
-    originalCategory: 'Roads & Potholes',
-    originalLocation: 'Near Metro Pillar 142, CMH Road, Indiranagar',
-    originalDate: '2026-10-10 09:30',
-    originalPhoto: 'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=600&auto=format&fit=crop&q=80',
-
-    suspectedComplaintId: 'CC-2026-1045',
-    suspectedTitle: 'Big crater in road opposite Metro 142',
-    suspectedCategory: 'Roads & Potholes',
-    suspectedLocation: 'Opp Metro Pillar 142, Indiranagar',
-    suspectedDate: '2026-10-11 16:45',
-    suspectedCitizen: 'Karthik Raman',
-    suspectedPhoto: 'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=600&auto=format&fit=crop&q=80',
-
-    matchType: 'Geospatial & Perceptual Image Similarity (Simulated)',
-    similarityScore: 94,
-    reviewStatus: 'PENDING_REVIEW', // PENDING_REVIEW, CONFIRMED_DUPLICATE, DISMISSED
-    reviewReason: '',
-  },
-  {
-    id: 'DUP-2026-02',
-    originalComplaintId: 'CC-2026-1038',
-    originalTitle: 'Open overflowing garbage dump on 80 Feet Road corner',
-    originalCategory: 'Garbage & Waste',
-    originalLocation: 'Corner of 80 Feet Road & 4th Cross, Indiranagar',
-    originalDate: '2026-10-06 11:20',
-    originalPhoto: 'https://images.unsplash.com/photo-1605600659908-0ef719419d41?w=600&auto=format&fit=crop&q=80',
-
-    suspectedComplaintId: 'CC-2026-1040',
-    suspectedTitle: 'Garbage piles rotting on pavement',
-    suspectedCategory: 'Garbage & Waste',
-    suspectedLocation: '80 Feet Road 4th Cross Junction',
-    suspectedDate: '2026-10-07 08:15',
-    suspectedCitizen: 'Meera Deshmukh',
-    suspectedPhoto: 'https://images.unsplash.com/photo-1605600659908-0ef719419d41?w=600&auto=format&fit=crop&q=80',
-
-    matchType: 'Proximity Match (within 25 meters)',
-    similarityScore: 88,
-    reviewStatus: 'CONFIRMED_DUPLICATE',
-    reviewReason: 'Both reported the same uncollected corner bin pile.',
-  },
-];
+export const INITIAL_DUPLICATES = [];
 
 export const INITIAL_NOTIFICATIONS = [
   {
@@ -1007,53 +962,10 @@ export const INITIAL_NOTIFICATIONS = [
   },
 ];
 
-export const INITIAL_AUDIT_LOGS = [
-  {
-    id: 'AUDIT-101',
-    actor: 'Priya Sharma (Citizen)',
-    action: 'SUBMIT_COMPLAINT',
-    affectedRecord: 'Complaint #CC-2026-1048',
-    timestamp: '2026-10-15 08:10:22',
-    details: 'Submitted new civic report "Private building debris dumped in public park corner" with 1 photo.',
-  },
-  {
-    id: 'AUDIT-102',
-    actor: 'Er. Rajesh Kumar (Municipal Officer)',
-    action: 'APPROVE_MATERIAL_REQUEST',
-    affectedRecord: 'Material Request #MR-2026-042',
-    timestamp: '2026-10-12 11:45:10',
-    details: 'Approved 12 bags of Cold-Mix Asphalt for Work Order #WO-2026-088.',
-  },
-  {
-    id: 'AUDIT-103',
-    actor: 'Er. Rajesh Kumar (Municipal Officer)',
-    action: 'CREATE_WORK_ORDER',
-    affectedRecord: 'Work Order #WO-2026-088',
-    timestamp: '2026-10-12 10:20:04',
-    details: 'Assigned pothole repair to Roads & Bridges Dept with HIGH priority.',
-  },
-  {
-    id: 'AUDIT-104',
-    actor: 'Er. Rajesh Kumar (Municipal Officer)',
-    action: 'VERIFY_AND_RESOLVE',
-    affectedRecord: 'Complaint #CC-2026-1038',
-    timestamp: '2026-10-09 16:45:00',
-    details: 'Inspected post-cleanup evidence and transitioned status to RESOLVED.',
-  },
-  {
-    id: 'AUDIT-105',
-    actor: 'Priya Sharma (Citizen)',
-    action: 'SUBMIT_FEEDBACK',
-    affectedRecord: 'Complaint #CC-2026-1038',
-    timestamp: '2026-10-10 10:00:15',
-    details: 'Submitted 5-star resolution rating: "Very fast response! The entire corner was cleared..."',
-  },
-];
-
+export const INITIAL_AUDIT_LOGS = [];
 
 export const INITIAL_USERS = [
   { id: 'USR-01', name: 'Dr. Aruna Rao', email: 'aruna.rao@municipal.gov', role: 'officer', dept: 'Public Works', status: 'ACTIVE', phone: '+91 94480 22334', joinedDate: '2026-01-10' },
-  { id: 'USR-02', name: 'Rajesh Kumar', email: 'rajesh.k@field.gov', role: 'supervisor', dept: 'Zone 4 Operations', status: 'ACTIVE', phone: '+91 94480 11223', joinedDate: '2026-01-12' },
   { id: 'USR-03', name: 'Priya Sharma', email: 'priya.s@gmail.com', role: 'citizen', dept: 'N/A', status: 'ACTIVE', phone: '+91 98765 43210', joinedDate: '2026-01-15' },
   { id: 'USR-04', name: 'Santosh (Admin)', email: 'admin@civicconnect.org', role: 'admin', dept: 'IT & Governance', status: 'ACTIVE', phone: '+91 91234 56789', joinedDate: '2026-01-01' },
 ];

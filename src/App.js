@@ -29,25 +29,14 @@ import { ComplaintManagement } from './pages/officer/ComplaintManagement';
 import { ComplaintMap } from './pages/officer/ComplaintMap';
 import { DuplicateDetection } from './pages/officer/DuplicateDetection';
 import { WorkOrders } from './pages/officer/WorkOrders';
+import { SupervisorAssignments } from './pages/supervisor/SupervisorAssignments';
 import { InventoryMaterials } from './pages/officer/InventoryMaterials';
 import { RepairVerification } from './pages/officer/RepairVerification';
 import { ReportsAnalytics } from './pages/officer/ReportsAnalytics';
 import { OfficerNotifications } from './pages/officer/OfficerNotifications';
 import { AuditHistory } from './pages/officer/AuditHistory';
 import { OfficerProfile } from './pages/officer/OfficerProfile';
-import { getMyComplaints } from './services/api';
-
-// Field Supervisor Pages (Member 3)
-import { SupervisorHome } from './pages/supervisor/SupervisorHome';
-import { AssignedWorkOrders } from './pages/supervisor/AssignedWorkOrders';
-import { WorkerAssignments } from './pages/supervisor/WorkerAssignments';
-import { RepairProgressTracking } from './pages/supervisor/RepairProgressTracking';
-import { PhotoEvidence } from './pages/supervisor/PhotoEvidence';
-import { MaterialInventory } from './pages/supervisor/MaterialInventory';
-import { MaterialRequests } from './pages/supervisor/MaterialRequests';
-import { ProgressReports } from './pages/supervisor/ProgressReports';
-import { SupervisorNotifications } from './pages/supervisor/SupervisorNotifications';
-import { SupervisorProfile } from './pages/supervisor/SupervisorProfile';
+import { getMyComplaints, getOfficerComplaints, getNotifications } from './services/api';
 
 // Admin Pages (Member 4)
 import { AdminHome } from './pages/admin/AdminHome';
@@ -111,21 +100,27 @@ export default function App() {
     setOfficerProfile,
     setSupervisorProfile,
     syncPersistedComplaints,
-  } = useCivic();
+ , syncPersistedNotifications } = useCivic();
 
   useEffect(() => {
-    if (!user) return;
-    const role =
-      user.role === 'CITIZEN'
-        ? 'citizen'
-        : user.role === 'ADMIN'
-        ? 'admin'
-        : user.role === 'SUPERVISOR'
-        ? 'supervisor'
-        : 'officer';
+    if (!user) {
+      syncPersistedComplaints([]);
+      syncPersistedNotifications([]);
+      return;
+    }
+    let active = true;
+    let complaintRefreshTimer;
+    syncPersistedComplaints([]);
+    syncPersistedNotifications([]);
+    const role = user.role === 'CITIZEN' ? 'citizen' : user.role === 'ADMIN' ? 'admin' : user.role === 'SUPERVISOR' ? 'supervisor' : 'officer';
     setCurrentRole(role);
+    const refreshNotifications = () => getNotifications().then((records) => { if (active) syncPersistedNotifications(records); }).catch(() => {});
+    refreshNotifications();
+    const notificationTimer = window.setInterval(refreshNotifications, 30000);
     if (user.role === 'CITIZEN') {
-      getMyComplaints().then(syncPersistedComplaints).catch(() => {});
+      const refreshComplaints = () => getMyComplaints().then((records) => { if (active) syncPersistedComplaints(records); }).catch(() => {});
+      refreshComplaints();
+      complaintRefreshTimer = window.setInterval(refreshComplaints, 30000);
       setCitizenProfile((previous) => ({
         ...previous,
         id: user.id,
@@ -138,6 +133,11 @@ export default function App() {
         avatarUrl: user.avatarUrl || '',
       }));
     } else if (user.role === 'OFFICER') {
+      const refreshComplaints = () => getOfficerComplaints().then((result) => {
+        if (active) syncPersistedComplaints(result?.complaints || []);
+      }).catch(() => {});
+      refreshComplaints();
+      complaintRefreshTimer = window.setInterval(refreshComplaints, 30000);
       setOfficerProfile((previous) => ({
         ...previous,
         id: user.id,
@@ -149,18 +149,12 @@ export default function App() {
         wardCoverage: user.wardCoverage || user.ward || 'Not assigned',
         avatarUrl: user.avatarUrl || '',
       }));
-    } else if (user.role === 'SUPERVISOR' && setSupervisorProfile) {
-      setSupervisorProfile((previous) => ({
-        ...previous,
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone || '+91 98765 43210',
-        title: user.title || 'Field Operations Supervisor',
-        zone: user.zone || 'Zone 4 - South Bangalore',
-        avatarUrl: user.avatarUrl || previous?.avatarUrl || '',
-      }));
     }
+    return () => {
+      active = false;
+      if (complaintRefreshTimer) window.clearInterval(complaintRefreshTimer);
+      window.clearInterval(notificationTimer);
+    };
   }, [user?.id, user?.role]);
 
   return (
@@ -189,6 +183,16 @@ export default function App() {
         <Route path="feedback" element={<MyFeedback />} />
         <Route path="profile" element={<CitizenProfile />} />
         <Route path="help" element={<HelpSupport />} />
+      </Route>
+
+      <Route path="/supervisor" element={<ProtectedRoute roles={['SUPERVISOR']}><OfficerLayout role="supervisor" pageTitle="Field Supervisor Assignments" /></ProtectedRoute>}>
+        <Route index element={<SupervisorAssignments />} />
+        <Route path="notifications" element={<OfficerNotifications />} />
+      </Route>
+
+      <Route path="/supervisor" element={<ProtectedRoute roles={['SUPERVISOR']}><OfficerLayout role="supervisor" pageTitle="Field Supervisor Assignments" /></ProtectedRoute>}>
+        <Route index element={<SupervisorAssignments />} />
+        <Route path="notifications" element={<OfficerNotifications />} />
       </Route>
 
       {/* Municipal Officer Portal Routes (Member 2) */}

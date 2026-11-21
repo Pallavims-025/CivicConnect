@@ -30,13 +30,13 @@ Before starting, copy `.env.example` to `.env` and configure `DATABASE_URL` and 
 
 ### Initial Administrator Account
 
-Before starting the app, set `ADMIN_EMAIL` and a unique `ADMIN_PASSWORD` (at least 12 characters) in your local `.env` file. You can optionally set `ADMIN_NAME`; if omitted, the email name is used. Then run the one-time setup command from the project directory:
+Before starting the app, set `ADMIN_EMAIL` and a unique `ADMIN_PASSWORD` (at least 12 characters) in your local `.env` file. You can optionally set `ADMIN_NAME`; if omitted, the email name is used. On API startup, CivicConnect creates the configured administrator if it is missing, and initializes a legacy matching admin account if it has no password. You can also run the setup command from the project directory:
 
 ```bash
 npm run seed:admin
 ```
 
-The script hashes the password with the same bcrypt settings used by login and inserts an approved `ADMIN` into the existing `users` table. It refuses to create another administrator if any `ADMIN` account already exists. The setup values are used only by this local command; there is no public administrator signup or provisioning endpoint. Sign in from the existing login page with `ADMIN_EMAIL` and `ADMIN_PASSWORD` to access `/admin`.
+The script hashes the password with bcrypt and inserts an approved `ADMIN` into the existing `users` table. It does not reset a password for an existing configured administrator. The setup values are used only by this local command and API startup; there is no public administrator signup or provisioning endpoint. Sign in from the existing login page with `ADMIN_EMAIL` and `ADMIN_PASSWORD` to access `/admin`.
 
 The application will be live at:
 👉 **`http://localhost:5173/`**

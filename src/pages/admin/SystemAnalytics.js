@@ -58,7 +58,7 @@ export function SystemAnalytics() {
   const roleCounts = [
     { name: 'Citizens', value: users?.filter((u) => (u.role || '').toLowerCase() === 'citizen').length || 1, color: '#3B82F6' },
     { name: 'Officers', value: users?.filter((u) => (u.role || '').toLowerCase() === 'officer').length || 1, color: '#10B981' },
-    { name: 'Supervisors', value: users?.filter((u) => (u.role || '').toLowerCase() === 'supervisor').length || 1, color: '#F59E0B' },
+    { name: 'Supervisors', value: users?.filter((u) => (u.role || '').toLowerCase() === 'supervisor').length || 0, color: '#F59E0B' },
     { name: 'Admins', value: users?.filter((u) => (u.role || '').toLowerCase() === 'admin').length || 1, color: '#8B5CF6' },
   ];
 

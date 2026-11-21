@@ -1,227 +1,41 @@
-import React, { useState } from 'react';
-import {
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  RotateCcw,
-  Calendar,
-  User,
-  ShieldCheck,
-  Building,
-  Image as ImageIcon,
-} from 'lucide-react';
-import { useCivic } from '../../context/CivicContext';
+import React, { useCallback, useEffect, useState } from 'react';
+import { AlertCircle, CheckCircle2, RefreshCw, RotateCcw, ShieldCheck } from 'lucide-react';
+import { getPendingVerifications, reviewAssignmentCompletion } from '../../services/api';
 
 export function RepairVerification() {
-  const { verifications, verifyRepair } = useCivic();
+  const [items, setItems] = useState([]);
+  const [remarks, setRemarks] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [busy, setBusy] = useState(null);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const refresh = useCallback(async (initial = false) => {
+    if (initial) setLoading(true); else setRefreshing(true);
+    try { setItems(await getPendingVerifications() || []); setError(''); }
+    catch (e) { setError(e.message || 'Could not load pending verifications.'); }
+    finally { setLoading(false); setRefreshing(false); }
+  }, []);
+  useEffect(() => { refresh(true); const timer = window.setInterval(() => refresh(), 30000); return () => window.clearInterval(timer); }, [refresh]);
 
-  const [selectedVerif, setSelectedVerif] = useState(null);
-  const [decision, setDecision] = useState('APPROVED'); // 'APPROVED' | 'REWORK'
-  const [remarks, setRemarks] = useState('Field repair verified and asphalt compaction meets quality standards.');
-
-  const handleDecisionSubmit = (e) => {
-    e.preventDefault();
-    if (!selectedVerif) return;
-    verifyRepair(selectedVerif.id, decision, remarks);
-    setSelectedVerif(null);
+  const decide = async (item, decision) => {
+    const note = (remarks[item.id] || '').trim();
+    if (note.length < 3) { setError('Enter review remarks before approving or requesting rework.'); return; }
+    setBusy(item.id); setError(''); setSuccess('');
+    try { await reviewAssignmentCompletion(item.id, { decision, remarks: note }); setSuccess(decision === 'APPROVE' ? 'Repair verified and complaint resolved.' : 'Rework request sent to the Field Supervisor.'); await refresh(); }
+    catch (e) { setError(e.message || 'Could not save the verification decision.'); }
+    finally { setBusy(null); }
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h2 className="text-xl md:text-2xl font-extrabold text-civic-text flex items-center space-x-2">
-          <ShieldCheck className="w-6 h-6 text-emerald-600" />
-          <span>Field Repair Quality Verification</span>
-        </h2>
-        <p className="text-xs text-civic-muted">
-          Review evidence photos submitted by field supervisors. Approving transitions the complaint to "Resolved" and notifies the citizen for rating.
-        </p>
-      </div>
-
-      {/* Verification Cards */}
-      <div className="space-y-6">
-        {verifications.map((item) => (
-          <div
-            key={item.id}
-            className={`bg-white rounded-3xl p-6 md:p-8 border shadow-xs space-y-6 ${
-              item.status === 'VERIFIED_APPROVED'
-                ? 'border-emerald-200 bg-emerald-50/10'
-                : item.status === 'REWORK_REQUESTED'
-                ? 'border-rose-200 bg-rose-50/10'
-                : 'border-slate-200'
-            }`}
-          >
-            {/* Top metadata */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
-              <div className="flex items-center space-x-3">
-                <span className="font-mono font-bold text-xs bg-slate-100 text-slate-800 px-2.5 py-1 rounded-lg">
-                  {item.id}
-                </span>
-                <span className="font-mono text-xs text-civic-blue font-semibold">
-                  Complaint: #{item.complaintId}
-                </span>
-                <span className="font-mono text-xs text-slate-500">
-                  WO: #{item.workOrderId}
-                </span>
-              </div>
-
-              <div>
-                {item.status === 'AWAITING_VERIFICATION' && (
-                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
-                    Awaiting Officer Inspection
-                  </span>
-                )}
-                {item.status === 'VERIFIED_APPROVED' && (
-                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 flex items-center space-x-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Quality Approved & Resolved</span>
-                  </span>
-                )}
-                {item.status === 'REWORK_REQUESTED' && (
-                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 flex items-center space-x-1">
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>Rework Instructed to Field Crew</span>
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Complaint Header */}
-            <div>
-              <h3 className="text-base font-bold text-slate-900">{item.complaintTitle}</h3>
-              <div className="flex flex-wrap items-center gap-x-4 text-xs text-slate-500 mt-1">
-                <span>Department: <strong className="text-slate-700">{item.department}</strong></span>
-                <span>Supervisor: <strong className="text-slate-700">{item.supervisor}</strong></span>
-                <span>Submitted: <strong className="text-slate-700">{item.submittedAt}</strong></span>
-              </div>
-            </div>
-
-            {/* Before vs After Photos Side by Side */}
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <span className="text-xs font-bold text-slate-600 uppercase tracking-wider block">
-                  Original Hazard Photo (Before)
-                </span>
-                <div className="rounded-2xl overflow-hidden aspect-video border border-slate-200 bg-slate-100">
-                  <img
-                    src={item.beforePhoto}
-                    alt="Before Repair"
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider block">
-                  Field Completion Photo (After Repair)
-                </span>
-                <div className="rounded-2xl overflow-hidden aspect-video border border-emerald-300 bg-slate-100">
-                  <img
-                    src={item.completionPhoto}
-                    alt="After Repair"
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Field Supervisor Completion Notes */}
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs">
-              <span className="font-bold text-slate-800 block mb-1">
-                Supervisor Completion Notes:
-              </span>
-              <p className="text-slate-600">{item.completionDetails}</p>
-            </div>
-
-            {/* Officer Remarks if completed */}
-            {item.officerRemarks && (
-              <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-200 text-xs text-emerald-950">
-                <span className="font-bold block mb-1">Municipal Engineer Review Remarks:</span>
-                <p>{item.officerRemarks}</p>
-              </div>
-            )}
-
-            {/* Actions */}
-            {item.status === 'AWAITING_VERIFICATION' && (
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-end space-x-3">
-                <button
-                  onClick={() => {
-                    setSelectedVerif(item);
-                    setDecision('REWORK');
-                    setRemarks('Repair surface uneven. Please re-compact asphalt and clean edge gravel.');
-                  }}
-                  className="px-4 py-2 bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold rounded-xl text-xs transition-colors flex items-center space-x-1.5"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Request Crew Rework</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setSelectedVerif(item);
-                    setDecision('APPROVED');
-                    setRemarks('Field repair verified and asphalt compaction meets quality standards.');
-                  }}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition-colors shadow-sm flex items-center space-x-1.5"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Approve & Mark Resolved</span>
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* Verification Decision Modal */}
-      {selectedVerif && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
-            <h3 className="font-bold text-base text-slate-900">
-              {decision === 'APPROVED' ? 'Approve Repair & Close Complaint' : 'Request Rework from Field Crew'}
-            </h3>
-            <p className="text-xs text-slate-500">
-              {decision === 'APPROVED'
-                ? `Complaint #${selectedVerif.complaintId} will be marked RESOLVED and citizen ${selectedVerif.citizenName || 'reporting user'} will be prompted for feedback.`
-                : `Work Order #${selectedVerif.workOrderId} will be set to REWORK REQUIRED.`}
-            </p>
-
-            <form onSubmit={handleDecisionSubmit} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Engineer Verification Remarks
-                </label>
-                <textarea
-                  rows={3}
-                  value={remarks}
-                  onChange={(e) => setRemarks(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300"
-                />
-              </div>
-
-              <div className="flex justify-end space-x-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedVerif(null)}
-                  className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className={`px-5 py-2 rounded-xl text-white font-bold ${
-                    decision === 'APPROVED'
-                      ? 'bg-emerald-600 hover:bg-emerald-700'
-                      : 'bg-rose-600 hover:bg-rose-700'
-                  }`}
-                >
-                  Confirm {decision === 'APPROVED' ? 'Approval' : 'Rework Request'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  return <div className="space-y-5">
+    <header className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="flex items-center gap-2 text-xl font-extrabold text-civic-text md:text-2xl"><ShieldCheck className="h-5 w-5 text-emerald-600" />Field repair verification</h1><p className="mt-1 text-xs text-civic-muted">Review supervisor remarks and completion photographs. Approval resolves the complaint and notifies the customer.</p></div><button onClick={() => refresh()} disabled={refreshing} className="inline-flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-xs font-semibold"><RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />Refresh</button></header>
+    {error && <div role="alert" className="flex gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700"><AlertCircle className="h-4 w-4 shrink-0" />{error}</div>}{success && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{success}</div>}
+    {loading ? <div className="rounded-2xl bg-white p-10 text-center text-sm text-slate-500">Loading completion reviews…</div> : items.length === 0 ? <div className="rounded-2xl border bg-white p-10 text-center text-sm text-slate-500">No supervisor completion reports are awaiting review.</div> : <div className="space-y-4">{items.map((item) => { const complaint = item.complaint; const workOrder = item.workOrder; const completionPhotos = workOrder?.photos || (item.completionPhotoUrl ? [{ imageUrl: item.completionPhotoUrl }] : []); return <article key={item.id} className="space-y-4 rounded-2xl border bg-white p-4 md:p-6"><header className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wide text-purple-700">Verification pending · {workOrder?.workOrderCode || workOrder?.id}</p><h2 className="mt-1 font-bold text-slate-900">{complaint?.complaintCode || complaint?.id}: {complaint?.title}</h2><p className="mt-1 text-xs text-slate-500">Submitted by {complaint?.user?.name || 'Customer'} · Supervisor {item.submittedBySupervisor?.name || item.supervisorName || '—'} · {new Date(item.submittedAt).toLocaleString()}</p></div><span className="rounded-full bg-amber-100 px-3 py-1 text-[10px] font-bold text-amber-800">Awaiting verification</span></header>
+      <div className="rounded-xl bg-slate-50 p-3"><h3 className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Supervisor completion remarks</h3><p className="mt-1 whitespace-pre-wrap text-sm text-slate-800">{item.completionDetails || 'No remarks provided.'}</p>{complaint?.address && <p className="mt-2 text-xs text-slate-500">{complaint.address}</p>}</div>
+      <div><h3 className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">Completion photographs ({completionPhotos.length})</h3><div className="flex flex-wrap gap-2">{completionPhotos.map((photo, index) => <a key={photo.id || `${photo.imageUrl}-${index}`} href={photo.imageUrl} target="_blank" rel="noreferrer" className="block h-28 w-36 overflow-hidden rounded-lg border bg-slate-100"><img src={photo.imageUrl} alt={`Completion evidence ${index + 1}`} className="h-full w-full object-cover" onError={(e) => { e.currentTarget.alt = 'Photo unavailable'; }} /></a>)}</div></div>
+      <div className="flex flex-wrap gap-2">{(complaint?.photos || []).map((photo, index) => <a key={photo.id || index} href={photo.imageUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-civic-blue underline">Open original photo {index + 1}</a>)}</div>
+      <label className="block text-xs font-semibold text-slate-700">Officer review remarks<textarea rows={2} value={remarks[item.id] || ''} onChange={(e) => setRemarks((current) => ({ ...current, [item.id]: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" placeholder="Explain the verification or rework decision" /></label>
+      <footer className="flex flex-wrap justify-end gap-2 border-t pt-3"><button disabled={busy === item.id} onClick={() => decide(item, 'REWORK')} className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 disabled:opacity-50"><RotateCcw className="h-3.5 w-3.5" />Request rework</button><button disabled={busy === item.id} onClick={() => decide(item, 'APPROVE')} className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><CheckCircle2 className="h-3.5 w-3.5" />Verify and resolve</button></footer>
+    </article>; })}</div>}
+  </div>;
 }

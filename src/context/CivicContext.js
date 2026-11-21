@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { markNotificationReadRequest } from '../services/api';
 import {
   INITIAL_CATEGORIES,
   INITIAL_CITIZEN,
@@ -31,7 +32,7 @@ export function CivicProvider({ children }) {
   const [supervisorProfile, setSupervisorProfile] = useState(INITIAL_SUPERVISOR);
 
   const [categories] = useState(INITIAL_CATEGORIES);
-  const [complaints, setComplaints] = useState(INITIAL_COMPLAINTS);
+  const [complaints, setComplaints] = useState([]);
   const [workOrders, setWorkOrders] = useState(INITIAL_WORK_ORDERS);
   const [inventory, setInventory] = useState(INITIAL_INVENTORY);
   const [materialRequests, setMaterialRequests] = useState(INITIAL_MATERIAL_REQUESTS);
@@ -87,57 +88,10 @@ export function CivicProvider({ children }) {
   // CITIZEN ACTIONS (Member 1)
   // ==========================================
   const submitComplaint = (record) => {
-    const categoryObj = categories.find(
-      (c) => c.id === parseInt(record.categoryId)
-    ) || categories[0];
-
-    const newId = record.id || `CC-2026-${1050 + complaints.length}`;
-    const timestamp = record.reportedDate || nowString();
-
-    const newComplaint = {
-      ...record,
-      id: newId,
-      reportedDate: timestamp,
-      lastUpdated: record.lastUpdated || timestamp,
-      category: record.category || categoryObj?.name || 'Other',
-      citizenName: record.citizenName || citizenProfile.name,
-      citizenPhone: record.citizenPhone || citizenProfile.phone,
-      assignedDepartment: record.assignedDepartment || 'Unassigned',
-      workOrderId: record.workOrderId || null,
-      timeline: record.timeline || [
-        {
-          date: timestamp,
-          title: 'Complaint Registered',
-          description: `Citizen submitted complaint under ${record.category || categoryObj?.name || 'Other'}.`,
-          by: citizenProfile.name,
-        },
-      ],
-      feedback: record.feedback || null,
-    };
-
-    setComplaints((prev) => [
-      newComplaint,
-      ...prev.filter((item) => item.id !== newComplaint.id),
-    ]);
-
-    // Cross-dashboard sync: push notification to municipal officers
-    pushNotification(
-      'officer',
-      'New Citizen Complaint Reported',
-      `${citizenProfile.name} submitted #${newComplaint.id}: "${newComplaint.title}" in ${newComplaint.category}.`,
-      newComplaint.id,
-      'COMPLAINT'
-    );
-
-    // Audit log
-    logAudit(
-      `${citizenProfile.name} (Citizen)`,
-      'SUBMIT_COMPLAINT',
-      `Complaint #${newComplaint.id}`,
-      `Filed new civic complaint "${newComplaint.title}" at ${newComplaint.address}.`
-    );
-
-    return newComplaint;
+    const photos = [...new Set((record.photos || []).map((photo) => typeof photo === 'string' ? photo.trim() : '').filter(Boolean))];
+    const savedRecord = { ...record, photos };
+    setComplaints((previous) => [savedRecord, ...previous.filter((item) => item.id !== savedRecord.id)]);
+    return savedRecord;
   };
 
   const submitFeedback = (complaintId, rating, comment) => {
@@ -176,31 +130,26 @@ export function CivicProvider({ children }) {
   };
 
   const syncPersistedComplaints = (records = []) => {
-    setComplaints((previous) => {
-      const byId = new Map(previous.map((item) => [item.id, item]));
+    const uniqueRecords = new Map();
+    for (const record of records) {
+      const photos = [...new Set((record.photos || []).map((photo) => typeof photo === 'string' ? photo.trim() : '').filter(Boolean))];
+      uniqueRecords.set(record.id, { ...record, photos });
+    }
+    setComplaints([...uniqueRecords.values()]);
+  };
 
-      const persisted = records.map((record) => ({
-        ...byId.get(record.id),
-        ...record,
-        citizenName: record.citizenName || citizenProfile.name,
-        citizenPhone: record.citizenPhone || citizenProfile.phone,
-        timeline: byId.get(record.id)?.timeline || [],
-        photos: [
-          ...new Set([
-            ...(record.photos || []),
-            ...(byId.get(record.id)?.photos || []),
-          ]),
-        ],
-        feedback: byId.get(record.id)?.feedback || null,
-      }));
-
-      const persistedIds = new Set(persisted.map((item) => item.id));
-
-      return [
-        ...persisted,
-        ...previous.filter((item) => !persistedIds.has(item.id)),
-      ];
-    });
+  const syncPersistedNotifications = (records = []) => {
+    setNotifications(records.map((item) => ({
+      id: item.id,
+      role: (item.targetRole || 'GENERAL').toLowerCase(),
+      title: item.title,
+      message: item.message,
+      timestamp: item.createdAt,
+      read: item.isRead,
+      linkId: item.linkId || item.complaintId || item.workOrderId,
+      complaintId: item.complaintId,
+      workOrderId: item.workOrderId,
+    })));
   };
 
 
@@ -1309,12 +1258,16 @@ export function CivicProvider({ children }) {
 
   // Notification actions
   const markNotificationRead = (id) => {
+    markNotificationReadRequest(id).catch(() => {});
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, read: true } : n))
     );
   };
 
   const markAllNotificationsRead = () => {
+    notifications.filter((notification) => !notification.read).forEach((notification) => {
+      markNotificationReadRequest(notification.id).catch(() => {});
+    });
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
@@ -1491,6 +1444,7 @@ export function CivicProvider({ children }) {
         updateCitizenProfile,
         syncPersistedComplaints,
         // Officer actions
+        syncPersistedNotifications,
         approveComplaint,
         rejectComplaint,
         createWorkOrder,

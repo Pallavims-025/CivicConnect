@@ -4,6 +4,7 @@ import supervisorRoutes from './supervisor.js';
 import adminRoutes from './admin.js';
 import authRoutes from './auth.js';
 import complaintRoutes from './complaints.js';
+import assignmentRoutes from './assignments.js';
 
 const router = Router();
 
@@ -21,5 +22,6 @@ router.use('/admin', adminRoutes);
 
 // Complaint records and locations use the existing Prisma complaint model.
 router.use('/complaints', complaintRoutes);
+router.use('/assignments', assignmentRoutes);
 
 export default router;

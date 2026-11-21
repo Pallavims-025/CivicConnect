@@ -159,7 +159,7 @@ export async function login(req, res, next) {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
+    if (typeof email !== 'string' || typeof password !== 'string' || !email.trim() || !password) {
       return res.status(422).json({
         success: false,
         errors: { general: 'Email and password are required.' },
@@ -167,7 +167,7 @@ export async function login(req, res, next) {
     }
 
     const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
+      where: { email: email.trim().toLowerCase() },
       include: { department: { select: { name: true, code: true } } },
     });
 

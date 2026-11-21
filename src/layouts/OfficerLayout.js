@@ -3,13 +3,13 @@ import { Outlet } from 'react-router-dom';
 import { Sidebar } from '../components/common/Sidebar';
 import { Header } from '../components/common/Header';
 
-export function OfficerLayout({ pageTitle }) {
+export function OfficerLayout({ pageTitle, role = 'officer' }) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   return (
     <div className="flex h-screen bg-civic-bg overflow-hidden">
       <Sidebar
-        role="officer"
+        role={role}
         isOpen={mobileSidebarOpen}
         onClose={() => setMobileSidebarOpen(false)}
       />

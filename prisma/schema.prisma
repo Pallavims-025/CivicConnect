@@ -44,9 +44,30 @@ enum ComplaintPriority {
   CRITICAL
 }
 
+enum DuplicateClassification {
+  NEW
+  POSSIBLE_DUPLICATE
+  LIKELY_DUPLICATE
+}
+
+enum DuplicateReviewStatus {
+  NOT_REQUIRED
+  PENDING_REVIEW
+  LINKED_TO_EXISTING
+  MARKED_SEPARATE
+}
+
+enum DuplicateMatchDecision {
+  PENDING
+  LINKED
+  SEPARATE
+  KEEP_REVIEWING
+}
+
 enum WorkOrderStatus {
   PENDING
   ASSIGNED
+  ACCEPTED
   IN_PROGRESS
   AWAITING_VERIFICATION
   COMPLETED
@@ -82,6 +103,10 @@ enum InventoryTransactionType {
 enum PhotoType {
   INITIAL_EVIDENCE
   RESOLUTION_EVIDENCE
+}
+
+enum WorkOrderPhotoType {
+  COMPLETION
 }
 
 enum NotificationType {
@@ -148,6 +173,10 @@ model User {
   assignedComplaints             Complaint[]              @relation("AssignedOfficerComplaints")
   uploadedPhotos                 ComplaintPhoto[]         @relation("PhotoUploader")
   assignedWorkOrders             WorkOrder[]              @relation("AssignedSupervisorWorkOrders")
+  officerAssignedWorkOrders      WorkOrder[]              @relation("OfficerAssignedWorkOrders")
+  workOrderHistoryActions        WorkOrderStatusHistory[] @relation("WorkOrderHistoryActor")
+  workOrderPhotosUploaded        WorkOrderPhoto[]         @relation("WorkOrderPhotoUploader")
+  reviewedDuplicateMatches       DuplicateComplaintMatch[] @relation("DuplicateMatchReviewer")
   repairVerificationsSubmitted   RepairVerification[]     @relation("SupervisorVerifications")
   repairVerificationsReviewed    RepairVerification[]     @relation("OfficerVerifications")
   statusHistoryActions           ComplaintStatusHistory[] @relation("StatusHistoryActor")
@@ -209,24 +238,33 @@ model Complaint {
   categoryId        Int               @map("category_id")
   departmentId      Int?              @map("department_id")
   assignedOfficerId String?           @map("assigned_officer_id") @db.VarChar(36)
+  duplicateOfId     String?           @map("duplicate_of_id") @db.VarChar(36)
+  duplicateClassification DuplicateClassification @default(NEW) @map("duplicate_classification")
+  duplicateReviewStatus DuplicateReviewStatus @default(NOT_REQUIRED) @map("duplicate_review_status")
 
   // Relationships with explicit names where necessary
   user            User                     @relation("CitizenComplaints", fields: [userId], references: [id], onDelete: Restrict)
   category        Category                 @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   department      Department?              @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   assignedOfficer User?                    @relation("AssignedOfficerComplaints", fields: [assignedOfficerId], references: [id], onDelete: SetNull)
+  duplicateOf     Complaint?                @relation("ComplaintDuplicates", fields: [duplicateOfId], references: [id], onDelete: SetNull)
+  duplicateChildren Complaint[]             @relation("ComplaintDuplicates")
   photos          ComplaintPhoto[]
   feedback        Feedback[]
   workOrders      WorkOrder[]
   statusHistory   ComplaintStatusHistory[]
   repairVerifications RepairVerification[]
   notifications   Notification[]
+  duplicateMatches DuplicateComplaintMatch[] @relation("DuplicateSourceComplaint")
+  matchedByDuplicateMatches DuplicateComplaintMatch[] @relation("DuplicateMatchedComplaint")
 
   // Indexes supporting dashboard queries
   @@index([userId])
   @@index([categoryId])
   @@index([departmentId])
   @@index([assignedOfficerId])
+  @@index([duplicateOfId])
+  @@index([duplicateReviewStatus, duplicateClassification])
   @@index([status])
   @@index([priority])
   @@index([createdAt])
@@ -241,7 +279,8 @@ model Complaint {
 // -----------------------------------------------------------------------------
 model ComplaintPhoto {
   id           String    @id @default(uuid()) @db.VarChar(36)
-  imageUrl     String    @map("image_url") @db.VarChar(1000)
+  imageUrl     String    @map("image_url") @db.MediumText
+  perceptualHash String? @map("perceptual_hash") @db.Char(16)
   photoType    PhotoType @default(INITIAL_EVIDENCE) @map("photo_type")
   caption      String?   @db.VarChar(255)
   uploadedById String?   @map("uploaded_by_id") @db.VarChar(36)
@@ -268,6 +307,7 @@ model WorkOrder {
   complaintId     String            @map("complaint_id") @db.VarChar(36)
   departmentId    Int               @map("department_id")
   supervisorId    String?           @map("supervisor_id") @db.VarChar(36)
+  assignedByOfficerId String?       @map("assigned_by_officer_id") @db.VarChar(36)
   supervisorName  String?           @map("supervisor_name") @db.VarChar(255)
   priority        ComplaintPriority @default(MEDIUM)
   status          WorkOrderStatus   @default(PENDING)
@@ -277,8 +317,10 @@ model WorkOrder {
   estimatedCost   Decimal           @default(0.00) @map("estimated_cost") @db.Decimal(12, 2)
   actualCost      Decimal?          @map("actual_cost") @db.Decimal(12, 2)
   beforePhotoUrl  String?           @map("before_photo_url") @db.VarChar(1000)
-  afterPhotoUrl   String?           @map("after_photo_url") @db.VarChar(1000)
+  afterPhotoUrl   String?           @map("after_photo_url") @db.MediumText
   issuedDate      DateTime          @default(now()) @map("issued_date")
+  assignedAt      DateTime?         @map("assigned_at")
+  acceptedAt      DateTime?         @map("accepted_at")
   deadline        DateTime          @map("deadline")
   completedDate   DateTime?         @map("completed_date")
   createdAt       DateTime          @default(now()) @map("created_at")
@@ -288,7 +330,10 @@ model WorkOrder {
   complaint            Complaint              @relation(fields: [complaintId], references: [id], onDelete: Restrict)
   department           Department             @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   supervisor           User?                  @relation("AssignedSupervisorWorkOrders", fields: [supervisorId], references: [id], onDelete: SetNull)
+  assignedByOfficer    User?                  @relation("OfficerAssignedWorkOrders", fields: [assignedByOfficerId], references: [id], onDelete: SetNull)
   repairVerifications  RepairVerification[]
+  statusHistory        WorkOrderStatusHistory[]
+  photos               WorkOrderPhoto[]
   materialRequests     MaterialRequest[]
   inventoryTransactions InventoryTransaction[]
   notifications        Notification[]
@@ -296,9 +341,67 @@ model WorkOrder {
   @@index([complaintId])
   @@index([departmentId])
   @@index([supervisorId])
+  @@index([assignedByOfficerId])
   @@index([status])
   @@index([deadline])
   @@map("work_orders")
+}
+
+model WorkOrderStatusHistory {
+  id              String           @id @default(uuid()) @db.VarChar(36)
+  workOrderId     String           @map("work_order_id") @db.VarChar(36)
+  previousStatus  WorkOrderStatus? @map("previous_status")
+  newStatus       WorkOrderStatus  @map("new_status")
+  notes           String?          @db.Text
+  changedByUserId String?          @map("changed_by_user_id") @db.VarChar(36)
+  changedByName   String           @map("changed_by_name") @db.VarChar(255)
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  changedBy User?     @relation("WorkOrderHistoryActor", fields: [changedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([workOrderId, createdAt])
+  @@index([changedByUserId])
+  @@map("work_order_status_history")
+}
+
+model WorkOrderPhoto {
+  id               String             @id @default(uuid()) @db.VarChar(36)
+  workOrderId      String             @map("work_order_id") @db.VarChar(36)
+  uploadedByUserId String?            @map("uploaded_by_user_id") @db.VarChar(36)
+  imageUrl         String             @map("image_url") @db.MediumText
+  photoType        WorkOrderPhotoType @default(COMPLETION) @map("photo_type")
+  caption          String?            @db.VarChar(255)
+  createdAt        DateTime           @default(now()) @map("created_at")
+
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  uploadedBy User?    @relation("WorkOrderPhotoUploader", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([workOrderId, photoType])
+  @@index([uploadedByUserId])
+  @@map("work_order_photos")
+}
+
+model DuplicateComplaintMatch {
+  id                 String                 @id @default(uuid()) @db.VarChar(36)
+  complaintId        String                 @map("complaint_id") @db.VarChar(36)
+  matchedComplaintId String                 @map("matched_complaint_id") @db.VarChar(36)
+  similarityScore    Float                  @map("similarity_score") @db.Double
+  classification     DuplicateClassification
+  comparison         Json
+  decision           DuplicateMatchDecision @default(PENDING)
+  reviewedByUserId   String?                @map("reviewed_by_user_id") @db.VarChar(36)
+  reviewedAt         DateTime?              @map("reviewed_at")
+  createdAt          DateTime               @default(now()) @map("created_at")
+
+  complaint        Complaint @relation("DuplicateSourceComplaint", fields: [complaintId], references: [id], onDelete: Cascade)
+  matchedComplaint Complaint @relation("DuplicateMatchedComplaint", fields: [matchedComplaintId], references: [id], onDelete: Cascade)
+  reviewedBy       User?     @relation("DuplicateMatchReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([complaintId, matchedComplaintId], map: "duplicate_matches_source_target_key")
+  @@index([complaintId, decision])
+  @@index([matchedComplaintId])
+  @@map("duplicate_complaint_matches")
 }
 
 // -----------------------------------------------------------------------------
@@ -427,8 +530,8 @@ model RepairVerification {
   submittedBySupervisorId  String?            @map("submitted_by_supervisor_id") @db.VarChar(36)
   supervisorName           String             @map("supervisor_name") @db.VarChar(255)
   completionDetails        String             @map("completion_details") @db.Text
-  beforePhotoUrl           String?            @map("before_photo_url") @db.VarChar(1000)
-  completionPhotoUrl       String             @map("completion_photo_url") @db.VarChar(1000)
+  beforePhotoUrl           String?            @map("before_photo_url") @db.MediumText
+  completionPhotoUrl       String             @map("completion_photo_url") @db.MediumText
   status                   VerificationStatus @default(AWAITING_VERIFICATION)
   verifiedByOfficerId      String?            @map("verified_by_officer_id") @db.VarChar(36)
   officerRemarks           String?            @map("officer_remarks") @db.Text

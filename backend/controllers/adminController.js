@@ -3,7 +3,6 @@ import { prisma } from '../lib/prisma.js';
 // In-memory fallback mock records when running in demo/offline mode without an active MySQL instance
 let mockUsers = [
   { id: 'USR-01', name: 'Dr. Aruna Rao', email: 'aruna.rao@municipal.gov', role: 'OFFICER', dept: 'Public Works', status: 'ACTIVE', phone: '+91 94480 22334', createdAt: new Date() },
-  { id: 'USR-02', name: 'Rajesh Kumar', email: 'rajesh.k@field.gov', role: 'SUPERVISOR', dept: 'Zone 4 Operations', status: 'ACTIVE', phone: '+91 94480 11223', createdAt: new Date() },
   { id: 'USR-03', name: 'Priya Sharma', email: 'priya.s@gmail.com', role: 'CITIZEN', dept: 'N/A', status: 'ACTIVE', phone: '+91 98765 43210', createdAt: new Date() },
   { id: 'USR-04', name: 'Santosh (Admin)', email: 'admin@civicconnect.org', role: 'ADMIN', dept: 'IT & Governance', status: 'ACTIVE', phone: '+91 91234 56789', createdAt: new Date() },
 ];
