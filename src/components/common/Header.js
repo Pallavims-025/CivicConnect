@@ -2,26 +2,18 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bell,
-  CheckCircle2,
-  AlertTriangle,
-  User,
-  Shield,
-  Layers,
-  ChevronDown,
   Menu,
-  HardHat,
-  Settings,
   Trash2,
   Check,
 } from 'lucide-react';
 import { useCivic } from '../../context/CivicContext';
 import { useAuth } from '../../context/AuthContext';
 import { resolveSupervisorAvatarUrl } from '../../services/supervisorApi';
+import { resolveAdminAvatarUrl } from '../../services/adminProfileApi';
 
-export function Header({ title, onToggleMobileSidebar }) {
+export function Header({ title, onToggleMobileSidebar, profilePath }) {
   const {
     currentRole,
-    setCurrentRole,
     citizenProfile,
     officerProfile,
     supervisorProfile,
@@ -36,7 +28,6 @@ export function Header({ title, onToggleMobileSidebar }) {
   const navigate = useNavigate();
 
   const [showNotifications, setShowNotifications] = useState(false);
-  const [showRoleMenu, setShowRoleMenu] = useState(false);
 
   const relevantNotifications = (notifications || []).filter(
     (n) => n.role === currentRole
@@ -50,20 +41,6 @@ export function Header({ title, onToggleMobileSidebar }) {
       : currentRole === 'citizen' ? '/citizen/notifications' : '/officer/notifications');
     if (target.startsWith('/') && !target.startsWith('//')) navigate(target);
     setShowNotifications(false);
-  };
-
-  const handleRoleSwitch = (newRole) => {
-    setCurrentRole(newRole);
-    setShowRoleMenu(false);
-    if (newRole === 'citizen') {
-      navigate('/citizen');
-    } else if (newRole === 'officer') {
-      navigate('/officer');
-    } else if (newRole === 'supervisor') {
-      navigate('/supervisor');
-    } else if (newRole === 'admin') {
-      navigate('/admin');
-    }
   };
 
   let activeUser = citizenProfile;
@@ -80,13 +57,13 @@ export function Header({ title, onToggleMobileSidebar }) {
     portalSubtitle = '';
   } else if (currentRole === 'admin') {
     activeUser = {
-      name: user?.name || 'Super Admin',
-          avatarUrl: user?.avatarUrl || '',
-      title: user?.title || 'System Administrator',
-      department: 'IT Administration',
+      name: user?.name || '',
+      avatarUrl: user?.avatarUrl || '',
+      title: user?.title || '',
+      department: user?.department?.name || '',
     };
     roleDisplayName = 'Admin';
-    portalSubtitle = 'System Administration';
+    portalSubtitle = 'Administrator Portal';
   }
 
   // If user object from auth is present and matches current role, overlay profile details
@@ -111,6 +88,8 @@ export function Header({ title, onToggleMobileSidebar }) {
 
   const profileAvatarUrl = currentRole === 'supervisor'
     ? resolveSupervisorAvatarUrl(activeUser?.avatarUrl)
+    : currentRole === 'admin'
+    ? resolveAdminAvatarUrl(activeUser?.avatarUrl)
     : activeUser?.avatarUrl;
 
   return (
@@ -141,94 +120,6 @@ export function Header({ title, onToggleMobileSidebar }) {
       </div>
 
       <div className="flex items-center space-x-3 md:space-x-4">
-        {/* DEMO ROLE SWITCHER */}
-        {currentRole === 'admin' && <div className="relative">
-          <button
-            onClick={() => setShowRoleMenu(!showRoleMenu)}
-            className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors border border-slate-300 shadow-xs cursor-pointer"
-            title="Switch between Citizen, Officer, Supervisor, and Admin view"
-          >
-            <Layers className="w-3.5 h-3.5 text-civic-blue" />
-            <span className="hidden sm:inline">Role:</span>
-            <span className="text-civic-blue font-bold">
-              {roleDisplayName}
-            </span>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
-          </button>
-
-          {showRoleMenu && (
-            <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50">
-              <div className="px-3 py-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                Select Interactive View
-              </div>
-
-              <button
-                onClick={() => handleRoleSwitch('citizen')}
-                className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer ${
-                  currentRole === 'citizen' ? 'bg-blue-50/70 font-semibold text-civic-blue' : 'text-slate-700'
-                }`}
-              >
-                <div className="flex items-center space-x-2.5">
-                  <User className="w-4 h-4 text-blue-600" />
-                  <div>
-                    <p className="font-semibold text-slate-900">Citizen Dashboard</p>
-                    <p className="text-[11px] text-slate-400">Public grievance reporting & tracking</p>
-                  </div>
-                </div>
-                {currentRole === 'citizen' && <span className="w-2 h-2 rounded-full bg-civic-blue"></span>}
-              </button>
-
-              <button
-                onClick={() => handleRoleSwitch('officer')}
-                className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer ${
-                  currentRole === 'officer' ? 'bg-blue-50/70 font-semibold text-civic-blue' : 'text-slate-700'
-                }`}
-              >
-                <div className="flex items-center space-x-2.5">
-                  <Shield className="w-4 h-4 text-amber-600" />
-                  <div>
-                    <p className="font-semibold text-slate-900">Municipal Operations Staff</p>
-                    <p className="text-[11px] text-slate-400">Verification, triage, assignment</p>
-                  </div>
-                </div>
-                {currentRole === 'officer' && <span className="w-2 h-2 rounded-full bg-civic-blue"></span>}
-              </button>
-
-              <button
-                onClick={() => handleRoleSwitch('supervisor')}
-                className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer ${
-                  currentRole === 'supervisor' ? 'bg-blue-50/70 font-semibold text-civic-blue' : 'text-slate-700'
-                }`}
-              >
-                <div className="flex items-center space-x-2.5">
-                  <HardHat className="w-4 h-4 text-amber-500" />
-                  <div>
-                    <p className="font-semibold text-slate-900">Field Supervisor Dashboard</p>
-                    <p className="text-[11px] text-slate-400">Crew, repair progress, materials, photos</p>
-                  </div>
-                </div>
-                {currentRole === 'supervisor' && <span className="w-2 h-2 rounded-full bg-civic-blue"></span>}
-              </button>
-
-              <button
-                onClick={() => handleRoleSwitch('admin')}
-                className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer ${
-                  currentRole === 'admin' ? 'bg-blue-50/70 font-semibold text-civic-blue' : 'text-slate-700'
-                }`}
-              >
-                <div className="flex items-center space-x-2.5">
-                  <Settings className="w-4 h-4 text-purple-600" />
-                  <div>
-                    <p className="font-semibold text-slate-900">System Administrator</p>
-                    <p className="text-[11px] text-slate-400">Master configuration & audit</p>
-                  </div>
-                </div>
-                {currentRole === 'admin' && <span className="w-2 h-2 rounded-full bg-civic-blue"></span>}
-              </button>
-            </div>
-          )}
-        </div>}
-
         {/* NOTIFICATION BELL */}
         <div className="relative">
           <button
@@ -305,7 +196,10 @@ export function Header({ title, onToggleMobileSidebar }) {
         </div>
 
         {/* USER PROFILE SNIPPET */}
-        <button onClick={() => ['citizen', 'officer', 'supervisor'].includes(currentRole) && navigate(`/${currentRole}/profile`)} aria-label="Open profile" className={`flex items-center space-x-2 pl-2 border-l border-slate-200 ${['citizen', 'officer', 'supervisor'].includes(currentRole) ? 'cursor-pointer' : 'cursor-default'}`}>
+        <button onClick={() => {
+          const target = profilePath || (['citizen', 'officer', 'supervisor', 'admin'].includes(currentRole) ? `/${currentRole}/profile` : null);
+          if (target) navigate(target);
+        }} aria-label="Open profile" className={`flex items-center space-x-2 pl-2 border-l border-slate-200 ${profilePath || ['citizen', 'officer', 'supervisor', 'admin'].includes(currentRole) ? 'cursor-pointer' : 'cursor-default'}`}>
           {profileAvatarUrl ? <img
             src={profileAvatarUrl}
             alt={activeUser?.name || 'User'}

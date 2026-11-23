@@ -62,6 +62,11 @@ app.use('/uploads/supervisor-avatars', express.static(fileURLToPath(new URL('./u
   index: false,
   maxAge: '1h',
 }));
+app.use('/uploads/admin-avatars', express.static(fileURLToPath(new URL('./uploads/admin-avatars/', import.meta.url)), {
+  dotfiles: 'deny',
+  index: false,
+  maxAge: '1h',
+}));
 
 // Root welcome endpoint
 app.get('/', (req, res) => {

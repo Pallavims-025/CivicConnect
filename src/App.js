@@ -5,6 +5,7 @@ import { useCivic } from './context/CivicContext';
 
 import { SupervisorHome } from './pages/supervisor/SupervisorHome';
 import { AssignedWorkOrders } from './pages/supervisor/AssignedWorkOrders';
+import { WorkerAssignments } from './pages/supervisor/WorkerAssignments';
 import { RepairProgressTracking } from './pages/supervisor/RepairProgressTracking';
 import { PhotoEvidence } from './pages/supervisor/PhotoEvidence';
 import { MaterialInventory } from './pages/supervisor/MaterialInventory';
@@ -19,7 +20,8 @@ import { OfficerLayout } from './layouts/OfficerLayout';
 import { SupervisorLayout } from './layouts/SupervisorLayout';
 import { AdminLayout } from './layouts/AdminLayout';
 
-// Login Page
+// Landing and Login Pages
+import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
 
 // Citizen Pages (Member 1)
@@ -42,10 +44,9 @@ import { InventoryMaterials } from './pages/officer/InventoryMaterials';
 import { RepairVerification } from './pages/officer/RepairVerification';
 import { ReportsAnalytics } from './pages/officer/ReportsAnalytics';
 import { OfficerNotifications } from './pages/officer/OfficerNotifications';
-import { CitizenNotifications } from './pages/citizen/CitizenNotifications';
 import { AuditHistory } from './pages/officer/AuditHistory';
 import { OfficerProfile } from './pages/officer/OfficerProfile';
-import { getMyComplaints, getOfficerComplaints, getNotifications, getUnreadNotificationCount, getOfficerMaterialRequests } from './services/api';
+import { getMyComplaints, getOfficerComplaints, getNotifications } from './services/api';
 
 // Admin Pages (Member 4)
 import { AdminHome } from './pages/admin/AdminHome';
@@ -74,7 +75,7 @@ function ProtectedRoute({ roles, children }) {
 function HomeRoute() {
   const { user, loading } = useAuth();
   if (loading) return <div className="min-h-screen grid place-items-center text-slate-600">Restoring your secure session…</div>;
-  return user ? <Navigate to={roleHome(user.role)} replace /> : <LoginPage initialMode="login" />;
+  return user ? <Navigate to={roleHome(user.role)} replace /> : <LandingPage />;
 }
 
 function FieldOfficerNotice() {
@@ -106,56 +107,41 @@ export default function App() {
   const {
     setCurrentRole,
     setCitizenProfile,
-    updateCitizenProfile,
     setOfficerProfile,
     setSupervisorProfile,
     syncPersistedComplaints,
-    syncPersistedNotifications,
-    syncOfficerMaterialRequests,
-    reportNotificationError } = useCivic();
+    syncPersistedNotifications } = useCivic();
 
   useEffect(() => {
     if (!user) {
       syncPersistedComplaints([]);
       syncPersistedNotifications([]);
-      syncOfficerMaterialRequests([]);
-      setCitizenProfile({ id: '', name: '', email: '', phone: '', address: '', avatarUrl: '' });
       return;
     }
     let active = true;
     let complaintRefreshTimer;
-    let materialRequestRefreshTimer;
     syncPersistedComplaints([]);
     syncPersistedNotifications([]);
-    syncOfficerMaterialRequests([]);
     const role = user.role === 'CITIZEN' ? 'citizen' : user.role === 'ADMIN' ? 'admin' : user.role === 'SUPERVISOR' ? 'supervisor' : 'officer';
     setCurrentRole(role);
-    const refreshNotifications = () => Promise.all([getNotifications(), getUnreadNotificationCount()])
-      .then(([records, unread]) => { if (active) syncPersistedNotifications(records, unread?.count ?? 0); })
-      .catch((error) => { if (active) reportNotificationError(error.message || 'Could not load notifications.'); });
+    const refreshNotifications = () => getNotifications().then((records) => { if (active) syncPersistedNotifications(records); }).catch(() => {});
     refreshNotifications();
     const notificationTimer = window.setInterval(refreshNotifications, 30000);
     if (user.role === 'CITIZEN') {
       const refreshComplaints = () => getMyComplaints().then((records) => { if (active) syncPersistedComplaints(records); }).catch(() => {});
       refreshComplaints();
       complaintRefreshTimer = window.setInterval(refreshComplaints, 30000);
-      const refreshMaterialRequests = () => getOfficerMaterialRequests().then((records) => { if (active) syncOfficerMaterialRequests(records); }).catch(() => {});
-      refreshMaterialRequests();
-      materialRequestRefreshTimer = window.setInterval(refreshMaterialRequests, 30000);
-      const actualCitizen = {
+      setCitizenProfile((previous) => ({
+        ...previous,
         id: user.id,
         name: user.name,
         email: user.email,
-        phone: user.phone || '',
-        ward: user.ward || '',
-        address: user.address || '',
+        phone: user.phone || 'Not provided',
+        ward: user.ward || 'Not assigned',
+        address: user.address || 'Not provided',
         joinedDate: user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '—',
         avatarUrl: user.avatarUrl || '',
-        alternateContactNumber: user.alternateContactNumber || '',
-        preferredLanguage: user.preferredLanguage || '',
-      };
-      setCitizenProfile(actualCitizen);
-      updateCitizenProfile(actualCitizen);
+      }));
     } else if (user.role === 'OFFICER') {
       const refreshComplaints = () => getOfficerComplaints().then((result) => {
         if (active) syncPersistedComplaints(result?.complaints || []);
@@ -177,16 +163,15 @@ export default function App() {
     return () => {
       active = false;
       if (complaintRefreshTimer) window.clearInterval(complaintRefreshTimer);
-      if (materialRequestRefreshTimer) window.clearInterval(materialRequestRefreshTimer);
       window.clearInterval(notificationTimer);
     };
   }, [user?.id, user?.role]);
 
   return (
     <Routes>
-      {/* Login Routes */}
+      {/* Landing / Login Routes */}
       <Route path="/" element={<HomeRoute />} />
-      <Route path="/landing" element={<Navigate to="/" replace />} />
+      <Route path="/landing" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage initialMode="login" />} />
       <Route path="/signup" element={<LoginPage initialMode="signup" />} />
       <Route path="/field-officer-unavailable" element={<FieldOfficerNotice />} />
@@ -206,7 +191,6 @@ export default function App() {
         <Route path="complaints" element={<MyComplaints />} />
         <Route path="complaints/:id" element={<ComplaintDetails />} />
         <Route path="feedback" element={<MyFeedback />} />
-        <Route path="notifications" element={<CitizenNotifications />} />
         <Route path="profile" element={<CitizenProfile />} />
         <Route path="help" element={<HelpSupport />} />
       </Route>
@@ -238,7 +222,7 @@ export default function App() {
         path="/supervisor"
         element={
           <ProtectedRoute roles={['SUPERVISOR']}>
-            <SupervisorLayout pageTitle="Supervisor Dashboard" />
+            <SupervisorLayout pageTitle="Field Operations & Supervision" />
           </ProtectedRoute>
         }
       >
@@ -246,6 +230,7 @@ export default function App() {
         <Route path="field-assignments" element={<SupervisorAssignments />} />
         <Route path="officer-notifications" element={<OfficerNotifications />} />
         <Route path="work-orders" element={<AssignedWorkOrders />} />
+        <Route path="worker-assignments" element={<WorkerAssignments />} />
         <Route path="repair-progress" element={<RepairProgressTracking />} />
         <Route path="photo-evidence" element={<PhotoEvidence />} />
         <Route path="material-inventory" element={<MaterialInventory />} />
@@ -260,7 +245,7 @@ export default function App() {
         path="/admin"
         element={
           <ProtectedRoute roles={['ADMIN']}>
-            <AdminLayout pageTitle="System Administration & Master Config" />
+            <AdminLayout pageTitle="Admin Dashboard" />
           </ProtectedRoute>
         }
       >
@@ -277,4 +262,5 @@ export default function App() {
     </Routes>
   );
 }
+
 

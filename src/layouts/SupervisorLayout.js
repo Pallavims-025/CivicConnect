@@ -22,6 +22,7 @@ export function SupervisorLayout({ pageTitle }) {
     <div className="flex h-screen bg-civic-bg overflow-hidden font-sans">
       <Sidebar
         role="supervisor"
+        showRoleSwitch={false}
         isOpen={mobileSidebarOpen}
         onClose={() => setMobileSidebarOpen(false)}
       />
@@ -29,6 +30,8 @@ export function SupervisorLayout({ pageTitle }) {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Header
           title={pageTitle}
+          enableRoleSwitcher={false}
+          profilePath="/supervisor/profile"
           onToggleMobileSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)}
         />
 

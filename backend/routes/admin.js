@@ -12,11 +12,16 @@ import {
   getAdminStats,
   getAuditLogs,
 } from '../controllers/adminController.js';
+import { getAdminProfile, uploadAdminProfilePhoto } from '../controllers/adminProfileController.js';
 
 const router = Router();
 
 // Protect every administrator API, including future routes added below.
 router.use(authenticate, authorize('ADMIN'));
+
+// Authenticated administrator's own profile and avatar.
+router.get('/profile', getAdminProfile);
+router.post('/profile/photo', uploadAdminProfilePhoto);
 
 // Platform Telemetry & Stats
 router.get('/stats', getAdminStats);

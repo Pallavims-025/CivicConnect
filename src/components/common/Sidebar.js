@@ -18,7 +18,6 @@ import {
   History,
   Building2,
   X,
-  Layers,
   Users,
   Camera,
   TrendingUp,
@@ -40,7 +39,6 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
     duplicates = [],
     notifications = [],
     materialRequests = [],
-    setCurrentRole,
     supervisorProfile,
   } = useCivic();
   const { logout, user } = useAuth();
@@ -104,7 +102,6 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
   const adminNav = [
     { label: 'Admin Dashboard', path: '/admin', icon: LayoutDashboard },
     { label: 'User Management', path: '/admin/users', icon: Users },
-    { label: 'Department Configuration', path: '/admin/departments', icon: Building2 },
     { label: 'System Analytics', path: '/admin/analytics', icon: BarChart3 },
     { label: 'Audit History', path: '/admin/audit', icon: History },
     { label: 'Profile', path: '/admin/profile', icon: User },
@@ -128,14 +125,6 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
   if (role === 'officer') items = officerNav;
   else if (role === 'supervisor') items = supervisorNav;
   else if (role === 'admin') items = adminNav;
-
-  const handleRoleToggle = () => {
-    const sequence = ['citizen', 'officer', 'supervisor', 'admin'];
-    const currentIndex = sequence.indexOf(role);
-    const next = sequence[(currentIndex + 1) % sequence.length];
-    if (setCurrentRole) setCurrentRole(next);
-    navigate(`/${next}`);
-  };
 
   const handleSignOut = () => {
     if (logout) {
@@ -185,7 +174,7 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
         </div>
 
         {/* Current Mode Badge */}
-        <div className="px-4 py-2.5 bg-[#0F2742]/50 border-b border-white/5 flex items-center justify-between text-xs">
+        {role !== 'admin' && <div className="px-4 py-2.5 bg-[#0F2742]/50 border-b border-white/5 flex items-center justify-between text-xs">
           <span className="text-blue-200/70 text-[11px] font-medium uppercase tracking-wider flex items-center space-x-1">
             {role === 'supervisor' && <HardHat className="w-3 h-3 text-amber-400 mr-1" />}
             <span>
@@ -193,9 +182,7 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
                 ? ''
                 : role === 'officer'
                 ? 'Operations Staff'
-                : role === 'supervisor'
-                ? ''
-                : 'System Administration'}
+                : ''}
             </span>
           </span>
           {role === 'supervisor' && (
@@ -212,15 +199,7 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
               </span>
             </div>
           )}
-          {role === 'admin' && <button
-            onClick={handleRoleToggle}
-            className="text-[11px] text-blue-300 hover:text-white flex items-center space-x-1 font-semibold hover:underline cursor-pointer"
-            title="Switch view"
-          >
-            <Layers className="w-3 h-3" />
-            <span>Switch</span>
-          </button>}
-        </div>
+        </div>}
 
         {/* Navigation Items */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">

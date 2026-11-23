@@ -48,6 +48,7 @@ export function SupervisorProfile() {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [photoError, setPhotoError] = useState('');
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState('');
   const photoInputRef = useRef(null);
 
   // Statistics
@@ -107,13 +108,17 @@ export function SupervisorProfile() {
     const reader = new FileReader();
     reader.onerror = () => setPhotoError('The selected image could not be read.');
     reader.onload = async () => {
+      const preview = typeof reader.result === 'string' ? reader.result : '';
+      setPhotoPreview(preview);
       setPhotoBusy(true);
       try {
-        await updateSupervisorAvatar(reader.result);
+        await updateSupervisorAvatar(preview);
         await refreshUser();
       } catch (error) {
+        setPhotoPreview('');
         setPhotoError(error.message || 'Photo could not be uploaded.');
       } finally {
+        setPhotoPreview('');
         setPhotoBusy(false);
       }
     };
@@ -125,6 +130,7 @@ export function SupervisorProfile() {
     setPhotoBusy(true);
     try {
       await removeSupervisorAvatar();
+      setPhotoPreview('');
       await refreshUser();
     } catch (error) {
       setPhotoError(error.message || 'Photo could not be removed.');
@@ -168,8 +174,8 @@ export function SupervisorProfile() {
       <div className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200 shadow-xs flex flex-col md:flex-row items-center md:items-start gap-6">
         <div className="flex flex-col items-center gap-3">
           <div className="relative">
-            {supervisorProfile.avatarUrl ? (
-              <img src={resolveSupervisorAvatarUrl(supervisorProfile.avatarUrl)} alt={`${supervisorProfile.name} profile`} className="h-24 w-24 rounded-3xl object-cover ring-4 ring-blue-50 shadow-md" />
+            {photoPreview || supervisorProfile.avatarUrl ? (
+              <img src={photoPreview || resolveSupervisorAvatarUrl(supervisorProfile.avatarUrl)} alt={`${supervisorProfile.name} profile`} className="h-24 w-24 rounded-3xl object-cover ring-4 ring-blue-50 shadow-md" />
             ) : (
               <div aria-label="Default profile avatar" className="flex h-24 w-24 items-center justify-center rounded-3xl bg-gradient-to-br from-civic-blue to-blue-500 text-2xl font-extrabold text-white ring-4 ring-blue-50 shadow-md">
                 {(supervisorProfile.name || '?').trim().split(/\s+/).map((word) => word[0]).slice(0, 2).join('').toUpperCase()}
