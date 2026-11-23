@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import { parseComplaintPhotos } from '../lib/photoUtils.js';
+import { notifyUser, notifyDepartmentOfficers } from '../lib/notificationService.js';
 
 const ACTIVE_WORK_ORDER_STATUSES = ['ASSIGNED', 'ACCEPTED', 'IN_PROGRESS', 'AWAITING_VERIFICATION', 'REWORK_REQUIRED'];
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
@@ -27,8 +28,13 @@ const workOrderInclude = {
 };
 
 async function notify(tx, { userId = null, targetRole = 'ALL', type, title, message, complaintId = null, workOrderId = null }) {
-  await tx.notification.create({
-    data: { userId, targetRole, notificationType: type, title, message, complaintId, workOrderId, linkId: complaintId || workOrderId },
+  if (!userId) return;
+  return notifyUser(tx, {
+    userId, role: targetRole, type, title, message, complaintId, workOrderId,
+    relatedEntityType: workOrderId ? 'WORK_ORDER' : 'COMPLAINT',
+    relatedEntityId: workOrderId || complaintId,
+    targetUrl: targetRole === 'SUPERVISOR' ? '/supervisor/work-orders' : '/officer/work-orders',
+    eventKey: `${title}:${workOrderId || complaintId}:${Date.now()}`,
   });
 }
 
@@ -128,6 +134,36 @@ export async function assignComplaint(req, res, next) {
         complaintId: complaint.id,
         workOrderId: workOrder.id,
       });
+      if (existing?.supervisorId && existing.supervisorId !== supervisor.id) {
+        await notifyUser(tx, {
+          userId: existing.supervisorId, role: 'SUPERVISOR', type: 'WORK_ORDER',
+          title: 'Field assignment reassigned',
+          message: `Complaint ${complaint.complaintCode || complaint.id} has been reassigned to another Field Supervisor.`,
+          complaintId: complaint.id, workOrderId: workOrder.id,
+          relatedEntityType: 'WORK_ORDER', relatedEntityId: workOrder.id,
+          targetUrl: '/supervisor/work-orders', eventKey: `field-reassigned:${workOrder.id}:${supervisor.id}:${now.toISOString()}`,
+        });
+      }
+      if (priority === 'CRITICAL') await notifyDepartmentOfficers(tx, {
+        departmentId: complaint.departmentId || complaint.category.departmentId,
+        excludeUserId: req.user.id,
+        type: 'WORK_ORDER', title: 'Urgent complaint needs attention',
+        message: `Critical complaint ${complaint.complaintCode || complaint.id} has been assigned for field work.`,
+        complaintId: complaint.id, workOrderId: workOrder.id,
+        relatedEntityType: 'WORK_ORDER', relatedEntityId: workOrder.id,
+        targetUrl: '/officer/work-orders', eventKey: `critical-assignment:${workOrder.id}`,
+      });
+      await notifyUser(tx, {
+        userId: complaint.userId, role: 'CITIZEN', type: 'WORK_ORDER',
+        title: existing ? 'Field team reassigned' : 'Field team assigned',
+        message: existing
+          ? `Complaint ${complaint.complaintCode || complaint.id} has been reassigned to a Field Supervisor.`
+          : `A Field Supervisor has been assigned to complaint ${complaint.complaintCode || complaint.id}.`,
+        complaintId: complaint.id, workOrderId: workOrder.id,
+        relatedEntityType: 'COMPLAINT', relatedEntityId: complaint.id,
+        targetUrl: `/citizen/complaints/${encodeURIComponent(complaint.complaintCode || complaint.id)}`,
+        eventKey: `field-assigned:${workOrder.id}:${supervisor.id}:${now.toISOString()}`,
+      });
       await tx.auditLog.create({ data: {
         userId: req.user.id,
         actorName: req.user.name,
@@ -166,6 +202,80 @@ export async function listOfficerAssignments(req, res, next) {
   } catch (error) { next(error); }
 }
 
+export async function listOfficerMaterialRequests(req, res, next) {
+  try {
+    const requests = await prisma.materialRequest.findMany({
+      where: { workOrder: { assignedByOfficerId: req.user.id } },
+      include: { items: { include: { inventoryItem: true } }, workOrder: { include: { supervisor: { select: { id: true, name: true } }, complaint: { select: { id: true, complaintCode: true, title: true } }, department: { select: { name: true } } } } },
+      orderBy: { requestDate: 'desc' },
+    });
+    res.json({ success: true, data: requests });
+  } catch (error) { next(error); }
+}
+
+export async function reviewOfficerMaterialRequest(req, res, next) {
+  try {
+    const { decision, approvedQtyMap = {}, notes = '' } = req.body;
+    if (!['APPROVED', 'REJECTED'].includes(decision) || typeof notes !== 'string' || notes.length > 5000 || !approvedQtyMap || typeof approvedQtyMap !== 'object' || Array.isArray(approvedQtyMap)) {
+      return res.status(422).json({ success: false, errors: { general: 'Choose APPROVED or REJECTED and provide valid review details.' } });
+    }
+    if (!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(req.params.id)) return res.status(400).json({ success: false, errors: { id: 'Invalid material request ID.' } });
+    const request = await prisma.materialRequest.findFirst({
+      where: { id: req.params.id, workOrder: { assignedByOfficerId: req.user.id } },
+      include: { items: { include: { inventoryItem: true } }, workOrder: { include: { supervisor: true, complaint: true } } },
+    });
+    if (!request) return res.status(404).json({ success: false, errors: { general: 'Material request not found for this officer.' } });
+    if (request.status !== 'PENDING') return res.status(409).json({ success: false, errors: { general: 'This material request has already been reviewed.' } });
+
+    const result = await prisma.$transaction(async (tx) => {
+      const approvedItems = request.items.map((line) => {
+        const raw = decision === 'APPROVED' ? (approvedQtyMap[line.inventoryItemId] ?? line.requestedQty) : 0;
+        const qty = Number(raw);
+        if (!Number.isInteger(qty) || qty < 0 || qty > line.requestedQty || (decision === 'APPROVED' && qty < 1)) {
+          throw Object.assign(new Error(`Enter an approved quantity between 1 and ${line.requestedQty} for ${line.inventoryItem.name}.`), { status: 422 });
+        }
+        return { line, qty };
+      });
+      for (const { line, qty } of approvedItems) {
+        if (!qty) continue;
+        const stock = await tx.inventoryItem.findUnique({ where: { id: line.inventoryItemId } });
+        if (!stock || stock.availableQuantity < qty) throw Object.assign(new Error(`Insufficient stock for ${line.inventoryItem.name}.`), { status: 409 });
+        const updatedStock = await tx.inventoryItem.update({ where: { id: stock.id }, data: { availableQuantity: { decrement: qty } } });
+        await tx.inventoryTransaction.create({ data: {
+          inventoryItemId: stock.id, transactionType: 'STOCK_DISPATCH', quantityChange: -qty,
+          balanceAfter: updatedStock.availableQuantity, materialRequestId: request.id, workOrderId: request.workOrderId,
+          reason: `Approved material request ${request.requestCode || request.id}`,
+          performedByUserId: req.user.id,
+        } });
+        await tx.materialRequestItem.update({ where: { id: line.id }, data: { approvedQty: qty } });
+      }
+      const updated = await tx.materialRequest.update({
+        where: { id: request.id },
+        data: { status: decision, decisionNotes: notes.trim() || null, decidedByUserId: req.user.id, decidedAt: new Date() },
+        include: { items: { include: { inventoryItem: true } }, workOrder: { include: { supervisor: true, complaint: true } } },
+      });
+      if (request.requestedByUserId) await notifyUser(tx, {
+        userId: request.requestedByUserId, role: 'SUPERVISOR', type: 'WORK_ORDER',
+        title: decision === 'APPROVED' ? 'Material request approved' : 'Material request rejected',
+        message: `Your request ${request.requestCode || request.id} for work order ${request.workOrder.workOrderCode || request.workOrderId} was ${decision.toLowerCase()}.${notes.trim() ? ` ${notes.trim()}` : ''}`,
+        complaintId: request.workOrder.complaintId, workOrderId: request.workOrderId,
+        relatedEntityType: 'MATERIAL_REQUEST', relatedEntityId: request.id,
+        targetUrl: '/supervisor/material-requests', eventKey: `material-request-decision:${request.id}`,
+      });
+      await notifyUser(tx, {
+        userId: req.user.id, role: 'OFFICER', type: 'WORK_ORDER',
+        title: `Material request ${decision.toLowerCase()}`,
+        message: `You ${decision.toLowerCase()} material request ${request.requestCode || request.id}.${notes.trim() ? ` ${notes.trim()}` : ''}`,
+        complaintId: request.workOrder.complaintId, workOrderId: request.workOrderId,
+        relatedEntityType: 'MATERIAL_REQUEST', relatedEntityId: request.id,
+        targetUrl: '/officer/inventory', eventKey: `material-request-officer-decision:${request.id}`,
+      });
+      return updated;
+    });
+    res.json({ success: true, data: result });
+  } catch (error) { next(error); }
+}
+
 export async function updateAssignmentStatus(req, res, next) {
   try {
     const { status, remarks } = req.body;
@@ -201,6 +311,15 @@ export async function updateAssignmentStatus(req, res, next) {
           performedByUserId: req.user.id,
           performedByName: req.user.name,
         } });
+        await notifyUser(tx, {
+          userId: assignment.complaint.userId, role: 'CITIZEN', type: 'WORK_ORDER',
+          title: 'Work started',
+          message: `Field work has started on complaint ${assignment.complaint.complaintCode || assignment.complaintId}.`,
+          complaintId: assignment.complaintId, workOrderId: assignment.id,
+          relatedEntityType: 'COMPLAINT', relatedEntityId: assignment.complaintId,
+          targetUrl: `/citizen/complaints/${encodeURIComponent(assignment.complaint.complaintCode || assignment.complaintId)}`,
+          eventKey: `work-started:${assignment.id}`,
+        });
       }
       await notify(tx, {
         userId: assignment.assignedByOfficerId,
@@ -210,6 +329,15 @@ export async function updateAssignmentStatus(req, res, next) {
         message: `${req.user.name} updated work order ${assignment.workOrderCode || assignment.id} to ${status.replaceAll('_', ' ')}.`,
         complaintId: assignment.complaintId,
         workOrderId: assignment.id,
+      });
+      await notifyUser(tx, {
+        userId: assignment.complaint.userId, role: 'CITIZEN', type: 'REPAIR_VERIFICATION',
+        title: 'Repair work completed',
+        message: `Field work on complaint ${assignment.complaint.complaintCode || assignment.complaintId} is complete and awaiting municipal verification.`,
+        complaintId: assignment.complaintId, workOrderId: assignment.id,
+        relatedEntityType: 'COMPLAINT', relatedEntityId: assignment.complaintId,
+        targetUrl: `/citizen/complaints/${encodeURIComponent(assignment.complaint.complaintCode || assignment.complaintId)}`,
+        eventKey: `repair-submitted:${assignment.id}`,
       });
       return tx.workOrder.findUnique({ where: { id: updated.id }, include: workOrderInclude });
     });
@@ -270,6 +398,25 @@ export async function completeAssignment(req, res, next) {
         complaintId: assignment.complaintId,
         workOrderId: assignment.id,
       });
+      await notifyUser(tx, {
+        userId: verification.workOrder.complaint.userId, role: 'CITIZEN', type: 'REPAIR_VERIFICATION',
+        title: approved ? 'Repair verification approved' : 'Repair verification rejected',
+        message: approved
+          ? `The repair for complaint ${verification.workOrder.complaint.complaintCode || verification.complaintId} was approved. ${remarks.trim()}`
+          : `The repair for complaint ${verification.workOrder.complaint.complaintCode || verification.complaintId} needs more work. ${remarks.trim()}`,
+        complaintId: verification.complaintId, workOrderId: verification.workOrderId,
+        relatedEntityType: 'COMPLAINT', relatedEntityId: verification.complaintId,
+        targetUrl: `/citizen/complaints/${encodeURIComponent(verification.workOrder.complaint.complaintCode || verification.complaintId)}`,
+        eventKey: `verification-result:${verification.id}`,
+      });
+      await notifyUser(tx, {
+        userId: req.user.id, role: 'OFFICER', type: 'REPAIR_VERIFICATION',
+        title: approved ? 'Repair verification approved' : 'Repair verification rejected',
+        message: `Your verification decision for complaint ${verification.workOrder.complaint.complaintCode || verification.complaintId} was recorded.`,
+        complaintId: verification.complaintId, workOrderId: verification.workOrderId,
+        relatedEntityType: 'WORK_ORDER', relatedEntityId: verification.workOrderId,
+        targetUrl: '/officer/verifications', eventKey: `verification-officer-result:${verification.id}`,
+      });
       return tx.workOrder.findUnique({ where: { id: updated.id }, include: workOrderInclude });
     });
     res.json({ success: true, data: record });
@@ -302,7 +449,7 @@ export async function reviewCompletion(req, res, next) {
       where: { id: req.params.id },
       include: { workOrder: { include: { complaint: { include: { user: true } }, supervisor: true } } },
     });
-    if (!verification || verification.status !== 'AWAITING_VERIFICATION') {
+    if (!verification || verification.workOrder.assignedByOfficerId !== req.user.id || verification.status !== 'AWAITING_VERIFICATION') {
       return res.status(404).json({ success: false, errors: { general: 'Pending completion verification not found.' } });
     }
     const approved = decision === 'APPROVE';
@@ -329,15 +476,6 @@ export async function reviewCompletion(req, res, next) {
         performedByUserId: req.user.id,
         performedByName: req.user.name,
       } });
-      await notify(tx, {
-        userId: verification.workOrder.complaint.userId,
-        targetRole: 'CITIZEN',
-        type: 'COMPLAINT',
-        title: approved ? 'Complaint resolved' : 'Repair requires more work',
-        message: approved ? `Your complaint ${verification.workOrder.complaint.complaintCode || verification.complaintId} has been verified and resolved.` : `More work is needed on your complaint ${verification.workOrder.complaint.complaintCode || verification.complaintId}.`,
-        complaintId: verification.complaintId,
-        workOrderId: verification.workOrderId,
-      });
       if (verification.workOrder.supervisorId) await notify(tx, {
         userId: verification.workOrder.supervisorId,
         targetRole: 'SUPERVISOR',
@@ -356,7 +494,11 @@ export async function reviewCompletion(req, res, next) {
 export async function listNotifications(req, res, next) {
   try {
     const notifications = await prisma.notification.findMany({
-      where: { OR: [{ userId: req.user.id }, { userId: null, targetRole: req.user.role }] },
+      where: { userId: req.user.id },
+      include: {
+        complaint: { select: { complaintCode: true } },
+        workOrder: { select: { workOrderCode: true } },
+      },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
@@ -364,13 +506,44 @@ export async function listNotifications(req, res, next) {
   } catch (error) { next(error); }
 }
 
+export async function countUnreadNotifications(req, res, next) {
+  try {
+    const count = await prisma.notification.count({ where: { userId: req.user.id, isRead: false } });
+    res.json({ success: true, data: { count } });
+  } catch (error) { next(error); }
+}
+
 export async function markNotificationRead(req, res, next) {
   try {
+    if (!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(req.params.id)) {
+      return res.status(400).json({ success: false, errors: { id: 'Invalid notification ID.' } });
+    }
     const notification = await prisma.notification.findFirst({
-      where: { id: req.params.id, OR: [{ userId: req.user.id }, { userId: null, targetRole: req.user.role }] },
+      where: { id: req.params.id, userId: req.user.id },
     });
     if (!notification) return res.status(404).json({ success: false, errors: { general: 'Notification not found.' } });
-    const updated = await prisma.notification.update({ where: { id: notification.id }, data: { isRead: true } });
+    const updated = await prisma.notification.update({ where: { id: notification.id }, data: { isRead: true, readAt: notification.readAt || new Date() } });
     res.json({ success: true, data: updated });
+  } catch (error) { next(error); }
+}
+
+export async function markAllNotificationsRead(req, res, next) {
+  try {
+    const result = await prisma.notification.updateMany({
+      where: { userId: req.user.id, isRead: false },
+      data: { isRead: true, readAt: new Date() },
+    });
+    res.json({ success: true, data: { updated: result.count } });
+  } catch (error) { next(error); }
+}
+
+export async function deleteNotification(req, res, next) {
+  try {
+    if (!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(req.params.id)) {
+      return res.status(400).json({ success: false, errors: { id: 'Invalid notification ID.' } });
+    }
+    const result = await prisma.notification.deleteMany({ where: { id: req.params.id, userId: req.user.id } });
+    if (!result.count) return res.status(404).json({ success: false, errors: { general: 'Notification not found.' } });
+    res.json({ success: true, data: { deleted: true } });
   } catch (error) { next(error); }
 }

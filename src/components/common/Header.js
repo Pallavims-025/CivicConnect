@@ -11,6 +11,8 @@ import {
   Menu,
   HardHat,
   Settings,
+  Trash2,
+  Check,
 } from 'lucide-react';
 import { useCivic } from '../../context/CivicContext';
 import { useAuth } from '../../context/AuthContext';
@@ -25,6 +27,9 @@ export function Header({ title, onToggleMobileSidebar }) {
     notifications,
     markNotificationRead,
     markAllNotificationsRead,
+    deleteNotification,
+    unreadNotificationCount,
+    notificationError,
   } = useCivic();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -35,7 +40,16 @@ export function Header({ title, onToggleMobileSidebar }) {
   const relevantNotifications = (notifications || []).filter(
     (n) => n.role === currentRole
   );
-  const unreadCount = relevantNotifications.filter((n) => !n.read).length;
+  const unreadCount = unreadNotificationCount ?? relevantNotifications.filter((n) => !n.read).length;
+
+  const openNotification = (notification) => {
+    if (!notification.read) markNotificationRead(notification.id).catch(() => {});
+    const target = notification.targetUrl || (notification.complaintId
+      ? currentRole === 'citizen' ? `/citizen/complaints/${encodeURIComponent(notification.complaintId)}` : '/officer/complaints'
+      : currentRole === 'citizen' ? '/citizen/notifications' : '/officer/notifications');
+    if (target.startsWith('/') && !target.startsWith('//')) navigate(target);
+    setShowNotifications(false);
+  };
 
   const handleRoleSwitch = (newRole) => {
     setCurrentRole(newRole);
@@ -66,7 +80,7 @@ export function Header({ title, onToggleMobileSidebar }) {
   } else if (currentRole === 'admin') {
     activeUser = {
       name: user?.name || 'Super Admin',
-      avatarUrl: user?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+          avatarUrl: user?.avatarUrl || '',
       title: user?.title || 'System Administrator',
       department: 'IT Administration',
     };
@@ -104,10 +118,10 @@ export function Header({ title, onToggleMobileSidebar }) {
         </button>
 
         <div>
-          <h1 className="text-lg md:text-xl font-bold text-civic-text leading-tight">
-            {title || 'Dashboard'}
+          <h1 className={`text-lg md:text-xl font-bold text-civic-text leading-tight ${currentRole === 'citizen' ? 'sr-only' : ''}`}>
+            {currentRole === 'officer' && title === 'Dashboard' ? '' : title || (currentRole === 'officer' ? '' : 'Dashboard')}
           </h1>
-          <div className="flex items-center space-x-2 text-xs text-civic-muted">
+          {currentRole !== 'officer' && <div className="flex items-center space-x-2 text-xs text-civic-muted">
             <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-50 text-civic-blue font-medium text-[11px] border border-blue-200">
               CivicConnect Platform
             </span>
@@ -115,13 +129,13 @@ export function Header({ title, onToggleMobileSidebar }) {
             <span className="hidden sm:inline text-slate-600 font-medium">
               {portalSubtitle}
             </span>
-          </div>
+          </div>}
         </div>
       </div>
 
       <div className="flex items-center space-x-3 md:space-x-4">
         {/* DEMO ROLE SWITCHER */}
-        <div className="relative">
+        {currentRole === 'admin' && <div className="relative">
           <button
             onClick={() => setShowRoleMenu(!showRoleMenu)}
             className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors border border-slate-300 shadow-xs cursor-pointer"
@@ -206,7 +220,7 @@ export function Header({ title, onToggleMobileSidebar }) {
               </button>
             </div>
           )}
-        </div>
+        </div>}
 
         {/* NOTIFICATION BELL */}
         <div className="relative">
@@ -217,8 +231,8 @@ export function Header({ title, onToggleMobileSidebar }) {
           >
             <Bell className="w-5 h-5" />
             {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 w-4 h-4 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
-                {unreadCount}
+              <span className="absolute top-1 right-1 min-w-4 h-4 px-1 bg-rose-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                {unreadCount > 99 ? '99+' : unreadCount}
               </span>
             )}
           </button>
@@ -244,51 +258,61 @@ export function Header({ title, onToggleMobileSidebar }) {
                 )}
               </div>
 
-              <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+              {notificationError && <p role="alert" className="px-3 py-2 text-[11px] text-rose-700 bg-rose-50">{notificationError}</p>}
+              <div className="max-h-96 overflow-y-auto divide-y divide-slate-100">
                 {relevantNotifications.length === 0 ? (
                   <div className="py-8 text-center text-xs text-slate-400">
                     No notifications yet.
                   </div>
                 ) : (
-                  relevantNotifications.map((n) => (
-                    <div
-                      key={n.id}
-                      onClick={() => markNotificationRead(n.id)}
-                      className={`p-3 text-xs hover:bg-slate-50 transition-colors cursor-pointer ${
-                        !n.read ? 'bg-blue-50/40 font-medium' : 'text-slate-600'
-                      }`}
+                  relevantNotifications.slice(0, 10).map((n) => (
+                    <div key={n.id} className={`p-3 flex items-start gap-2 ${!n.read ? 'bg-blue-50/50' : ''}`}>
+                    <button
+                      onClick={() => openNotification(n)}
+                      className="min-w-0 flex-1 text-left text-xs hover:text-civic-blue"
                     >
                       <div className="flex items-start justify-between">
                         <p className="font-semibold text-slate-800">{n.title}</p>
+                        {!n.read && <span className="w-2 h-2 mt-1 rounded-full bg-civic-blue shrink-0" />}
                         <span className="text-[10px] text-slate-400 whitespace-nowrap ml-2">
-                          {n.timestamp ? (n.timestamp.includes(' ') ? n.timestamp.split(' ')[1] : n.timestamp) : ''}
+                          {n.timestamp ? new Date(n.timestamp).toLocaleString() : ''}
                         </span>
                       </div>
                       <p className="text-slate-600 mt-0.5 line-clamp-2">{n.message}</p>
+                      {n.complaintId && <p className="mt-1 text-[10px] text-slate-400">Complaint {n.complaintCode || n.complaintId}</p>}
+                    </button>
+                    <div className="flex gap-1 shrink-0">
+                      {!n.read && <button onClick={() => markNotificationRead(n.id).catch(() => {})} title="Mark as read" aria-label="Mark as read" className="p-1 rounded hover:bg-white text-slate-500"><Check className="w-3.5 h-3.5" /></button>}
+                      <button onClick={() => deleteNotification(n.id).catch(() => {})} title="Delete notification" aria-label="Delete notification" className="p-1 rounded hover:bg-white text-slate-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </div>
                     </div>
                   ))
                 )}
+              </div>
+              <div className="flex items-center justify-between px-3 py-2 border-t border-slate-100">
+                {unreadCount > 0 && <button onClick={() => markAllNotificationsRead().catch(() => {})} className="text-[11px] text-civic-blue font-semibold hover:underline">Mark all as read</button>}
+                {['citizen', 'officer', 'supervisor'].includes(currentRole) && <button onClick={() => { navigate(currentRole === 'citizen' ? '/citizen/notifications' : currentRole === 'officer' ? '/officer/notifications' : '/supervisor/notifications'); setShowNotifications(false); }} className="ml-auto text-[11px] text-civic-blue font-semibold hover:underline">View all notifications</button>}
               </div>
             </div>
           )}
         </div>
 
         {/* USER PROFILE SNIPPET */}
-        <div className="flex items-center space-x-2 pl-2 border-l border-slate-200">
-          <img
-            src={activeUser?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'}
+        <button onClick={() => ['citizen','officer'].includes(currentRole) && navigate(`/${currentRole}/profile`)} aria-label="Open profile" className="flex items-center space-x-2 pl-2 border-l border-slate-200">
+          {activeUser?.avatarUrl ? <img
+            src={activeUser.avatarUrl}
             alt={activeUser?.name || 'User'}
             className="w-8 h-8 rounded-full object-cover ring-2 ring-slate-200"
-          />
+          /> : <span className="w-8 h-8 rounded-full bg-civic-blue text-white flex items-center justify-center text-xs font-bold">{(activeUser?.name || '?').trim().split(/\s+/).map((word) => word[0]).slice(0,2).join('').toUpperCase()}</span>}
           <div className="hidden lg:block text-left">
             <p className="text-xs font-semibold text-slate-800 leading-tight">
-              {activeUser?.name || 'User'}
+              {currentRole === 'officer' ? (activeUser?.name || '') : (activeUser?.name || 'User')}
             </p>
-            <p className="text-[11px] text-slate-500 leading-tight">
+            {currentRole !== 'officer' && <p className="text-[11px] text-slate-500 leading-tight">
               {activeUser?.department || roleDisplayName}
-            </p>
+            </p>}
           </div>
-        </div>
+        </button>
       </div>
     </header>
   );

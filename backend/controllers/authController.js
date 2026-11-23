@@ -246,6 +246,40 @@ export async function me(req, res, next) {
   }
 }
 
+export async function updateCitizenProfile(req, res, next) {
+  try {
+    if (req.user.role !== 'CITIZEN') return res.status(403).json({ success: false, error: { message: 'Citizen account required.' } });
+    const { name, alternateContactNumber, address, preferredLanguage, avatarUrl } = req.body;
+    const data = {};
+    if (name !== undefined) { if (typeof name !== 'string' || name.trim().length < 2 || name.length > 255) return res.status(422).json({ success: false, error: { message: 'Enter a valid name.' } }); data.name = name.trim(); }
+    if (alternateContactNumber !== undefined) { if (alternateContactNumber !== null && (typeof alternateContactNumber !== 'string' || alternateContactNumber.length > 50)) return res.status(422).json({ success: false, error: { message: 'Alternate number is invalid.' } }); data.alternateContactNumber = alternateContactNumber?.trim() || null; }
+    if (address !== undefined) { if (typeof address !== 'string' || address.length > 500) return res.status(422).json({ success: false, error: { message: 'Address must be under 500 characters.' } }); data.address = address.trim() || null; }
+    if (preferredLanguage !== undefined) { if (preferredLanguage !== null && (typeof preferredLanguage !== 'string' || preferredLanguage.length > 80)) return res.status(422).json({ success: false, error: { message: 'Preferred language is invalid.' } }); data.preferredLanguage = preferredLanguage?.trim() || null; }
+    if (avatarUrl !== undefined) { if (avatarUrl !== null && (typeof avatarUrl !== 'string' || !/^data:image\/(jpeg|png|webp);base64,/.test(avatarUrl) || avatarUrl.length > 2800000)) return res.status(422).json({ success: false, error: { message: 'Photo must be JPEG, PNG, or WebP and under 2 MB.' } }); data.avatarUrl = avatarUrl; }
+    const user = await prisma.user.update({ where: { id: req.user.id }, data });
+    return res.json({ success: true, user: safeUser(user) });
+  } catch (err) { next(err); }
+}
+
+export async function updateOfficerProfile(req, res, next) {
+  try {
+    if (req.user.role !== 'OFFICER') return res.status(403).json({ success: false, error: { message: 'Officer account required.' } });
+    const { name, phone, alternateContactNumber, address, preferredLanguage, avatarUrl } = req.body;
+    const data = {};
+    if (name !== undefined) { if (typeof name !== 'string' || name.trim().length < 2 || name.length > 255) return res.status(422).json({ success: false, error: { message: 'Enter a valid name.' } }); data.name = name.trim(); }
+    if (phone !== undefined) { if (typeof phone !== 'string' || phone.length > 50) return res.status(422).json({ success: false, error: { message: 'Contact number is invalid.' } }); data.phone = phone.trim() || null; }
+    if (alternateContactNumber !== undefined) data.alternateContactNumber = typeof alternateContactNumber === 'string' ? alternateContactNumber.trim().slice(0, 50) || null : null;
+    if (address !== undefined) data.address = typeof address === 'string' ? address.trim().slice(0, 500) || null : null;
+    if (preferredLanguage !== undefined) data.preferredLanguage = typeof preferredLanguage === 'string' ? preferredLanguage.trim().slice(0, 80) || null : null;
+    if (avatarUrl !== undefined) {
+      if (avatarUrl !== null && (typeof avatarUrl !== 'string' || !/^data:image\/(jpeg|png|webp);base64,/.test(avatarUrl) || avatarUrl.length > 2800000)) return res.status(422).json({ success: false, error: { message: 'Photo must be JPEG, PNG, or WebP and under 2 MB.' } });
+      data.avatarUrl = avatarUrl;
+    }
+    const user = await prisma.user.update({ where: { id: req.user.id }, data });
+    return res.json({ success: true, data: safeUser(user) });
+  } catch (err) { next(err); }
+}
+
 /**
  * POST /api/auth/logout
  * Stateless JWT — client discards token. We just audit it.

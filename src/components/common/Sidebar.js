@@ -75,10 +75,11 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
 
   // Section: Citizen Sidebar Navigation
   const citizenNav = [
-    { label: 'Citizen Dashboard', path: '/citizen', icon: LayoutDashboard },
+    { label: 'Dashboard', path: '/citizen', icon: LayoutDashboard },
     { label: 'Report Complaint', path: '/citizen/report', icon: PlusCircle, badge: 'New', badgeColor: 'bg-emerald-500' },
     { label: 'My Complaints', path: '/citizen/complaints', icon: FileText, count: complaints.length },
     { label: 'My Feedback', path: '/citizen/feedback', icon: MessageSquare },
+    { label: 'Notifications', path: '/citizen/notifications', icon: Bell },
     { label: 'Profile', path: '/citizen/profile', icon: User },
     { label: 'Help & Support', path: '/citizen/help', icon: HelpCircle },
   ];
@@ -174,13 +175,13 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
             </div>
           </div>
 
-          <button
+          {role === 'admin' && <button
             onClick={onClose}
             className="md:hidden p-1.5 rounded-lg text-white/70 hover:bg-white/10 cursor-pointer"
             aria-label="Close sidebar"
           >
             <X className="w-5 h-5" />
-          </button>
+          </button>}
         </div>
 
         {/* Current Mode Badge */}
@@ -189,7 +190,7 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
             {role === 'supervisor' && <HardHat className="w-3 h-3 text-amber-400 mr-1" />}
             <span>
               {role === 'citizen'
-                ? 'Citizen Interface'
+                ? ''
                 : role === 'officer'
                 ? 'Operations Staff'
                 : role === 'supervisor'
@@ -202,14 +203,14 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
               {supervisorProfile?.name || user?.name || 'Field Supervisor'}
             </span>
           )}
-          <button
+          {role !== 'citizen' && role !== 'officer' && <button
             onClick={handleRoleToggle}
             className="text-[11px] text-blue-300 hover:text-white flex items-center space-x-1 font-semibold hover:underline cursor-pointer"
             title="Switch view"
           >
             <Layers className="w-3 h-3" />
             <span>Switch</span>
-          </button>
+          </button>}
         </div>
 
         {/* Navigation Items */}

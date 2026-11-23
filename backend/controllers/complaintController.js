@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import { normalizePhoto, parseComplaintPhotos } from '../lib/photoUtils.js';
-import { findDuplicateCandidates } from '../lib/duplicateDetection.js';
+import { findDuplicateCandidates, refreshDuplicateCandidates } from '../lib/duplicateDetection.js';
+import { notifyDepartmentOfficers, notifyUser } from '../lib/notificationService.js';
 
 const complaintInclude = {
   category: { select: { id: true, name: true } },
@@ -163,6 +164,30 @@ export async function createComplaint(req, res, next) {
         },
         include: complaintInclude,
       });
+      const complaintLabel = created.complaintCode || created.id;
+      await notifyUser(tx, {
+        userId: req.user.id, role: 'CITIZEN', type: 'COMPLAINT',
+        title: 'Complaint submitted', message: `Your complaint ${complaintLabel} was submitted successfully.`,
+        complaintId: created.id, relatedEntityType: 'COMPLAINT', relatedEntityId: created.id,
+        targetUrl: `/citizen/complaints/${encodeURIComponent(complaintLabel)}`,
+        eventKey: `complaint-submitted:${created.id}`,
+      });
+      await notifyDepartmentOfficers(tx, {
+        departmentId: category.departmentId,
+        type: 'COMPLAINT', title: 'New complaint received',
+        message: `Complaint ${complaintLabel} is ready for review.`,
+        complaintId: created.id, relatedEntityType: 'COMPLAINT', relatedEntityId: created.id,
+        targetUrl: '/officer/complaints', eventKey: `new-complaint:${created.id}`,
+      });
+      if (duplicateCandidates.length) {
+        await notifyDepartmentOfficers(tx, {
+          departmentId: category.departmentId,
+          type: 'COMPLAINT', title: 'Potential duplicate needs review',
+          message: `Complaint ${complaintLabel} has a calculated potential match.`,
+          complaintId: created.id, relatedEntityType: 'COMPLAINT', relatedEntityId: created.id,
+          targetUrl: '/officer/duplicates', eventKey: `duplicate-review:${created.id}`,
+        });
+      }
       if (duplicateCandidates.length) {
         await tx.duplicateComplaintMatch.createMany({
           data: duplicateCandidates.map((candidate) => ({
@@ -209,6 +234,8 @@ export async function getOfficerComplaint(req, res, next) {
 
 export async function listDuplicateReviews(req, res, next) {
   try {
+    const totalComplaints = await prisma.complaint.count();
+    if (totalComplaints > 1) await refreshDuplicateCandidates(prisma);
     const matches = await prisma.duplicateComplaintMatch.findMany({
       where: { decision: { in: ['PENDING', 'KEEP_REVIEWING'] } },
       include: {
@@ -217,7 +244,7 @@ export async function listDuplicateReviews(req, res, next) {
       },
       orderBy: [{ similarityScore: 'desc' }, { createdAt: 'desc' }],
     });
-    return res.json({ success: true, data: matches.map((match) => ({
+    return res.json({ success: true, data: { totalComplaints, matches: matches.map((match) => ({
       id: match.id,
       similarityScore: match.similarityScore,
       classification: match.classification,
@@ -225,7 +252,7 @@ export async function listDuplicateReviews(req, res, next) {
       decision: match.decision,
       complaint: toMapRecord(match.complaint),
       matchedComplaint: toMapRecord(match.matchedComplaint),
-    })) });
+    })) } });
   } catch (error) {
     next(error);
   }
@@ -274,6 +301,39 @@ export async function reviewDuplicateMatch(req, res, next) {
           data: { decision: 'SEPARATE', reviewedByUserId: req.user.id, reviewedAt: new Date() },
         });
       }
+      if (decision !== 'KEEP_REVIEWING') {
+        const source = await tx.complaint.findUnique({
+          where: { id: match.complaintId },
+          select: { userId: true, complaintCode: true, assignedOfficerId: true },
+        });
+        const decisionMessage = decision === 'LINK'
+          ? `Complaint ${source.complaintCode || match.complaintId} was linked to an existing report after municipal review. Your report remains available.`
+          : `Complaint ${source.complaintCode || match.complaintId} was reviewed and marked as a separate issue.`;
+        await notifyUser(tx, {
+          userId: source.userId, role: 'CITIZEN', type: 'COMPLAINT',
+          title: decision === 'LINK' ? 'Duplicate review completed' : 'Complaint review completed',
+          message: decisionMessage, complaintId: match.complaintId,
+          relatedEntityType: 'COMPLAINT', relatedEntityId: match.complaintId,
+          targetUrl: `/citizen/complaints/${encodeURIComponent(source.complaintCode || match.complaintId)}`,
+          eventKey: `duplicate-decision:${match.id}:${reviewedDecision}`,
+        });
+        await notifyUser(tx, {
+          userId: req.user.id, role: 'OFFICER', type: 'COMPLAINT',
+          title: 'Duplicate review decision saved',
+          message: `Your decision for complaint ${source.complaintCode || match.complaintId} was saved.`,
+          complaintId: match.complaintId, relatedEntityType: 'COMPLAINT', relatedEntityId: match.complaintId,
+          targetUrl: '/officer/duplicates', eventKey: `duplicate-decision-reviewer:${match.id}:${reviewedDecision}`,
+        });
+        if (source.assignedOfficerId && source.assignedOfficerId !== req.user.id) {
+          await notifyUser(tx, {
+            userId: source.assignedOfficerId, role: 'OFFICER', type: 'COMPLAINT',
+            title: 'Duplicate review decision recorded',
+            message: `Complaint ${source.complaintCode || match.complaintId} was ${decision === 'LINK' ? 'linked to the primary report' : 'marked as separate'}.`,
+            complaintId: match.complaintId, relatedEntityType: 'COMPLAINT', relatedEntityId: match.complaintId,
+            targetUrl: '/officer/duplicates', eventKey: `duplicate-decision-officer:${match.id}:${reviewedDecision}`,
+          });
+        }
+      }
     });
     return res.json({ success: true, message: decision === 'LINK' ? 'Complaint linked; both customer reports remain available.' : decision === 'SEPARATE' ? 'Complaint marked as a separate issue.' : 'Match kept open for further review.' });
   } catch (error) {
@@ -311,7 +371,7 @@ export async function updateComplaintStatus(req, res, next) {
 
     const current = await prisma.complaint.findFirst({
       where: { OR: [{ id: req.params.id }, { complaintCode: req.params.id }] },
-      select: { id: true, status: true, userId: true, complaintCode: true },
+      select: { id: true, status: true, userId: true, complaintCode: true, assignedOfficerId: true },
     });
     if (!current) return res.status(404).json({ success: false, errors: { general: 'Complaint not found.' } });
     if (status === 'RESOLVED') {
@@ -336,7 +396,7 @@ export async function updateComplaintStatus(req, res, next) {
           rejectionReason: status === 'REJECTED' ? normalizedRemarks : null,
         },
       });
-      await tx.complaintStatusHistory.create({
+      const statusHistory = await tx.complaintStatusHistory.create({
         data: {
           complaintId: current.id,
           previousStatus: current.status,
@@ -351,6 +411,7 @@ export async function updateComplaintStatus(req, res, next) {
         const statusLabel = status.replaceAll('_', ' ').toLowerCase();
         await tx.notification.create({
           data: {
+            notificationCode: `STATUS-${statusHistory.id}`,
             userId: current.userId,
             targetRole: 'CITIZEN',
             notificationType: 'COMPLAINT',
@@ -358,8 +419,21 @@ export async function updateComplaintStatus(req, res, next) {
             message: `Your complaint ${current.complaintCode || current.id} is now ${statusLabel}.${normalizedRemarks ? ` ${normalizedRemarks}` : ''}`,
             complaintId: current.id,
             linkId: current.id,
+            relatedEntityType: 'COMPLAINT',
+            relatedEntityId: current.id,
+            targetUrl: `/citizen/complaints/${encodeURIComponent(current.complaintCode || current.id)}`,
+            readAt: null,
           },
         });
+        if (current.assignedOfficerId && current.assignedOfficerId !== req.user.id) {
+          await notifyUser(tx, {
+            userId: current.assignedOfficerId, role: 'OFFICER', type: 'COMPLAINT',
+            title: `Complaint ${statusLabel}`,
+            message: `Complaint ${current.complaintCode || current.id} changed to ${statusLabel}.${normalizedRemarks ? ` ${normalizedRemarks}` : ''}`,
+            complaintId: current.id, relatedEntityType: 'COMPLAINT', relatedEntityId: current.id,
+            targetUrl: '/officer/complaints', eventKey: `complaint-status:${current.id}:${status}:${Date.now()}`,
+          });
+        }
       }
       return tx.complaint.findUnique({ where: { id: current.id }, include: complaintInclude });
     });

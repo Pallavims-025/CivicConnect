@@ -9,6 +9,7 @@ const attributes = [
 
 export function DuplicateDetection() {
   const [matches, setMatches] = useState([]);
+  const [totalComplaints, setTotalComplaints] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -17,8 +18,13 @@ export function DuplicateDetection() {
 
   const refresh = useCallback(async (initial = false) => {
     if (initial) setLoading(true); else setRefreshing(true);
-    try { setMatches(await getDuplicateReviews() || []); setError(''); }
-    catch (fetchError) { setError(fetchError.message || 'Could not load duplicate review candidates.'); }
+    try {
+      const result = await getDuplicateReviews();
+      setMatches(Array.isArray(result) ? result : result?.matches || []);
+      setTotalComplaints(Array.isArray(result) ? null : result?.totalComplaints ?? 0);
+      setError('');
+    }
+    catch (fetchError) { setMatches([]); setTotalComplaints(null); setError(fetchError.message || 'Could not load duplicate review candidates.'); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -37,7 +43,7 @@ export function DuplicateDetection() {
   return <div className="space-y-5">
     <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><h1 className="text-xl md:text-2xl font-extrabold text-civic-text flex items-center gap-2"><Copy className="w-5 h-5 text-purple-700" />Duplicate review</h1><p className="text-xs text-civic-muted mt-1">Similarity candidates are suggestions. Customer submissions remain intact until you review them.</p></div><button onClick={() => refresh(false)} disabled={refreshing} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold"><RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />Refresh</button></header>
     {error && <div role="alert" className="p-3 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs flex gap-2"><AlertCircle className="w-4 h-4 shrink-0" />{error}</div>}
-    {loading ? <div className="bg-white rounded-2xl p-12 text-center text-sm text-slate-500">Comparing submitted complaints…</div> : matches.length === 0 ? <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center"><p className="font-semibold text-slate-700">No duplicate candidates need review.</p><p className="text-xs text-slate-500 mt-1">New customer submissions are checked automatically.</p></div> : <div className="space-y-4">{matches.map((match) => <article key={match.id} className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-4">
+    {loading ? <div className="bg-white rounded-2xl p-12 text-center text-sm text-slate-500">Comparing submitted complaints…</div> : !error && matches.length === 0 ? <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center"><p className="font-semibold text-slate-700">{totalComplaints === 0 ? 'No complaints have been submitted yet.' : 'No potential duplicate complaints found.'}</p><p className="text-xs text-slate-500 mt-1">{totalComplaints === 0 ? 'New customer reports will appear here after submission.' : 'Complaint records are compared by description, category, date, location, and available photo hashes.'}</p></div> : matches.length > 0 && <div className="space-y-4">{matches.map((match) => <article key={match.id} className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-2"><div className="flex flex-wrap items-center gap-2"><span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${match.classification === 'LIKELY_DUPLICATE' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'}`}>{match.classification.replaceAll('_', ' ')}</span><span className="text-xs font-semibold text-slate-700">Similarity {(match.similarityScore * 100).toFixed(0)}%</span><span className="font-mono text-xs text-civic-blue">Candidate {match.complaint.id}</span><span className="text-slate-400">↔</span><span className="font-mono text-xs text-slate-700">Existing {match.matchedComplaint.id}</span></div><button onClick={() => setSelected(selected?.id === match.id ? null : match)} className="px-3 py-1.5 rounded-lg bg-purple-50 text-purple-800 text-xs font-bold">{selected?.id === match.id ? 'Hide comparison' : 'Compare details'}</button></header>
       <div className="grid md:grid-cols-2 gap-3"><ComplaintCard title="New customer report" complaint={match.complaint} /><ComplaintCard title="Potential match" complaint={match.matchedComplaint} /></div>
       {selected?.id === match.id && <Comparison match={match} />}
@@ -54,5 +60,6 @@ function Comparison({ match }) {
   const values = match.comparison?.attributeScores || {};
   const locationDistance = match.comparison?.locationDistanceMeters;
   const dateDifference = match.comparison?.dateDifferenceDays;
-  return <section className="rounded-xl border border-purple-100 p-3"><h3 className="text-xs font-bold mb-2">Attribute comparison</h3><div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{attributes.map(([key, label]) => { const score = values[key]; return <div key={key} className={`rounded-lg p-2 text-[10px] ${score === null || score === undefined ? 'bg-slate-100 text-slate-500' : score >= 0.75 ? 'bg-emerald-50 text-emerald-800' : score >= 0.45 ? 'bg-amber-50 text-amber-800' : 'bg-rose-50 text-rose-800'}`}><p className="font-semibold">{label}</p><p>{score === null || score === undefined ? 'Not comparable' : `${(score * 100).toFixed(0)}% similar`}</p>{key === 'location' && locationDistance !== null && locationDistance !== undefined && <p>{locationDistance} m apart</p>}{key === 'date' && dateDifference !== null && dateDifference !== undefined && <p>{dateDifference} days apart</p>}</div>; })}</div><p className="text-[10px] text-slate-500 mt-2">The score combines title, description, category, address, coordinates, dates, and perceptual image hashes when available.</p></section>;
+  const reasons = attributes.filter(([key]) => values[key] !== null && values[key] !== undefined && values[key] >= 0.5).map(([, label]) => label);
+  return <section className="rounded-xl border border-purple-100 p-3"><h3 className="text-xs font-bold mb-2">Why these reports matched</h3><p className="text-xs text-slate-600 mb-3">{reasons.length ? `Similar ${reasons.join(', ').toLowerCase()}.` : 'Combined attribute scores exceeded the review threshold.'}</p><div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{attributes.map(([key, label]) => { const score = values[key]; return <div key={key} className={`rounded-lg p-2 text-[10px] ${score === null || score === undefined ? 'bg-slate-100 text-slate-500' : score >= 0.75 ? 'bg-emerald-50 text-emerald-800' : score >= 0.45 ? 'bg-amber-50 text-amber-800' : 'bg-rose-50 text-rose-800'}`}><p className="font-semibold">{label}</p><p>{score === null || score === undefined ? 'Not comparable' : `${(score * 100).toFixed(0)}% similar`}</p>{key === 'location' && locationDistance !== null && locationDistance !== undefined && <p>{locationDistance} m apart</p>}{key === 'date' && dateDifference !== null && dateDifference !== undefined && <p>{dateDifference} days apart</p>}</div>; })}</div><p className="text-[10px] text-slate-500 mt-2">The score combines complaint text, category, address, coordinates, dates, and uploaded photo perceptual hashes when available.</p></section>;
 }

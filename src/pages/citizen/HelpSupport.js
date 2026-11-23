@@ -234,7 +234,7 @@ export function HelpSupport() {
           </form>
         </div>
 
-        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs flex flex-col justify-between">
+        {/* Municipal helpline directory removed from Citizen support. */}{false && <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs flex flex-col justify-between">
           <div>
             <h3 className="font-bold text-sm text-slate-800 mb-2 flex items-center space-x-2">
               <PhoneCall className="w-4 h-4 text-emerald-600" />
@@ -265,7 +265,7 @@ export function HelpSupport() {
           <div className="mt-4 pt-3 border-t border-slate-100 text-[11px] text-slate-400">
             Emergency helplines operate 24 hours daily. For non-urgent issues, reporting via CivicConnect app enables full digital tracking.
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   );

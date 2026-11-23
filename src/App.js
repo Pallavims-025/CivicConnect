@@ -43,9 +43,10 @@ import { InventoryMaterials } from './pages/officer/InventoryMaterials';
 import { RepairVerification } from './pages/officer/RepairVerification';
 import { ReportsAnalytics } from './pages/officer/ReportsAnalytics';
 import { OfficerNotifications } from './pages/officer/OfficerNotifications';
+import { CitizenNotifications } from './pages/citizen/CitizenNotifications';
 import { AuditHistory } from './pages/officer/AuditHistory';
 import { OfficerProfile } from './pages/officer/OfficerProfile';
-import { getMyComplaints, getOfficerComplaints, getNotifications } from './services/api';
+import { getMyComplaints, getOfficerComplaints, getNotifications, getUnreadNotificationCount, getOfficerMaterialRequests } from './services/api';
 
 // Admin Pages (Member 4)
 import { AdminHome } from './pages/admin/AdminHome';
@@ -106,41 +107,56 @@ export default function App() {
   const {
     setCurrentRole,
     setCitizenProfile,
+    updateCitizenProfile,
     setOfficerProfile,
     setSupervisorProfile,
     syncPersistedComplaints,
-    syncPersistedNotifications } = useCivic();
+    syncPersistedNotifications,
+    syncOfficerMaterialRequests,
+    reportNotificationError } = useCivic();
 
   useEffect(() => {
     if (!user) {
       syncPersistedComplaints([]);
       syncPersistedNotifications([]);
+      syncOfficerMaterialRequests([]);
+      setCitizenProfile({ id: '', name: '', email: '', phone: '', address: '', avatarUrl: '' });
       return;
     }
     let active = true;
     let complaintRefreshTimer;
+    let materialRequestRefreshTimer;
     syncPersistedComplaints([]);
     syncPersistedNotifications([]);
+    syncOfficerMaterialRequests([]);
     const role = user.role === 'CITIZEN' ? 'citizen' : user.role === 'ADMIN' ? 'admin' : user.role === 'SUPERVISOR' ? 'supervisor' : 'officer';
     setCurrentRole(role);
-    const refreshNotifications = () => getNotifications().then((records) => { if (active) syncPersistedNotifications(records); }).catch(() => {});
+    const refreshNotifications = () => Promise.all([getNotifications(), getUnreadNotificationCount()])
+      .then(([records, unread]) => { if (active) syncPersistedNotifications(records, unread?.count ?? 0); })
+      .catch((error) => { if (active) reportNotificationError(error.message || 'Could not load notifications.'); });
     refreshNotifications();
     const notificationTimer = window.setInterval(refreshNotifications, 30000);
     if (user.role === 'CITIZEN') {
       const refreshComplaints = () => getMyComplaints().then((records) => { if (active) syncPersistedComplaints(records); }).catch(() => {});
       refreshComplaints();
       complaintRefreshTimer = window.setInterval(refreshComplaints, 30000);
-      setCitizenProfile((previous) => ({
-        ...previous,
+      const refreshMaterialRequests = () => getOfficerMaterialRequests().then((records) => { if (active) syncOfficerMaterialRequests(records); }).catch(() => {});
+      refreshMaterialRequests();
+      materialRequestRefreshTimer = window.setInterval(refreshMaterialRequests, 30000);
+      const actualCitizen = {
         id: user.id,
         name: user.name,
         email: user.email,
-        phone: user.phone || 'Not provided',
-        ward: user.ward || 'Not assigned',
-        address: user.address || 'Not provided',
+        phone: user.phone || '',
+        ward: user.ward || '',
+        address: user.address || '',
         joinedDate: user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '—',
         avatarUrl: user.avatarUrl || '',
-      }));
+        alternateContactNumber: user.alternateContactNumber || '',
+        preferredLanguage: user.preferredLanguage || '',
+      };
+      setCitizenProfile(actualCitizen);
+      updateCitizenProfile(actualCitizen);
     } else if (user.role === 'OFFICER') {
       const refreshComplaints = () => getOfficerComplaints().then((result) => {
         if (active) syncPersistedComplaints(result?.complaints || []);
@@ -162,6 +178,7 @@ export default function App() {
     return () => {
       active = false;
       if (complaintRefreshTimer) window.clearInterval(complaintRefreshTimer);
+      if (materialRequestRefreshTimer) window.clearInterval(materialRequestRefreshTimer);
       window.clearInterval(notificationTimer);
     };
   }, [user?.id, user?.role]);
@@ -190,6 +207,7 @@ export default function App() {
         <Route path="complaints" element={<MyComplaints />} />
         <Route path="complaints/:id" element={<ComplaintDetails />} />
         <Route path="feedback" element={<MyFeedback />} />
+        <Route path="notifications" element={<CitizenNotifications />} />
         <Route path="profile" element={<CitizenProfile />} />
         <Route path="help" element={<HelpSupport />} />
       </Route>

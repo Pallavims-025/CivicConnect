@@ -36,6 +36,8 @@ async function request(path, options = {}) {
 
 export const getComplaintCategories = () => request('/complaints/categories');
 export const getMyComplaints = () => request('/complaints/mine');
+export const updateCitizenProfileRequest = (profile) => request('/auth/citizen-profile', { method: 'PATCH', body: JSON.stringify(profile) });
+export const updateOfficerProfileRequest = (profile) => request('/auth/officer-profile', { method: 'PATCH', body: JSON.stringify(profile) });
 export const createComplaint = (complaint) => request('/complaints', {
   method: 'POST',
   body: JSON.stringify(complaint),
@@ -53,13 +55,20 @@ export const assignComplaintToSupervisor = (complaintId, assignment) => request(
   body: JSON.stringify(assignment),
 });
 export const getOfficerAssignments = () => request('/assignments/officer');
+export const getOfficerMaterialRequests = () => request('/assignments/material-requests');
+export const reviewOfficerMaterialRequest = (id, decision, approvedQtyMap, notes) => request(`/assignments/material-requests/${encodeURIComponent(id)}`, {
+  method: 'PATCH', body: JSON.stringify({ decision, approvedQtyMap, notes }),
+});
 export const getMyAssignments = () => request('/assignments/mine');
 export const updateAssignmentStatus = (id, update) => request(`/assignments/${encodeURIComponent(id)}/status`, { method: 'PATCH', body: JSON.stringify(update) });
 export const submitAssignmentCompletion = (id, completion) => request(`/assignments/${encodeURIComponent(id)}/complete`, { method: 'POST', body: JSON.stringify(completion) });
 export const getPendingVerifications = () => request('/assignments/verifications');
 export const reviewAssignmentCompletion = (id, review) => request(`/assignments/verifications/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(review) });
-export const getNotifications = () => request('/assignments/notifications');
-export const markNotificationReadRequest = (id) => request(`/assignments/notifications/${encodeURIComponent(id)}/read`, { method: 'PATCH' });
+export const getNotifications = () => request('/notifications');
+export const getUnreadNotificationCount = () => request('/notifications/unread-count');
+export const markNotificationReadRequest = (id) => request(`/notifications/${encodeURIComponent(id)}/read`, { method: 'PATCH' });
+export const markAllNotificationsReadRequest = () => request('/notifications/read-all', { method: 'PATCH' });
+export const deleteNotificationRequest = (id) => request(`/notifications/${encodeURIComponent(id)}`, { method: 'DELETE' });
 export const getDuplicateReviews = () => request('/complaints/officer/duplicates');
 export const reviewDuplicate = (matchId, decision, matchedComplaintId) => request(`/complaints/officer/duplicates/${encodeURIComponent(matchId)}`, {
   method: 'PATCH',

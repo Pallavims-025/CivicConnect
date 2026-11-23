@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { markNotificationReadRequest } from '../services/api';
+import { markNotificationReadRequest, markAllNotificationsReadRequest, deleteNotificationRequest } from '../services/api';
 import {
   fetchSupervisorDashboardData,
   updateSupervisorCrew,
@@ -15,6 +15,7 @@ import {
   updateSupervisorWorkerTask,
   deleteSupervisorWorkerTask,
 } from '../services/supervisorApi';
+import { reviewOfficerMaterialRequest } from '../services/api';
 import {
   INITIAL_CATEGORIES,
   INITIAL_CITIZEN,
@@ -31,7 +32,6 @@ import {
   INITIAL_PROGRESS_REPORTS,
   INITIAL_REPAIR_VERIFICATIONS,
   INITIAL_DUPLICATES,
-  INITIAL_NOTIFICATIONS,
   INITIAL_AUDIT_LOGS,
   INITIAL_USERS,
   INITIAL_DEPARTMENTS,
@@ -42,7 +42,8 @@ const CivicContext = createContext();
 export function CivicProvider({ children }) {
   // Roles: 'citizen' | 'officer' | 'supervisor' | 'admin'
   const [currentRole, setCurrentRole] = useState('citizen');
-  const [citizenProfile, setCitizenProfile] = useState(INITIAL_CITIZEN);
+  const [citizenProfile, setCitizenProfile] = useState({ id: '', name: '', email: '', phone: '', address: '', avatarUrl: '' });
+  const updateCitizenProfile = (updated) => setCitizenProfile((prev) => ({ ...prev, ...updated }));
   const [officerProfile, setOfficerProfile] = useState(INITIAL_OFFICER);
   const [supervisorProfile, setSupervisorProfile] = useState(INITIAL_SUPERVISOR);
 
@@ -53,7 +54,10 @@ export function CivicProvider({ children }) {
   const [materialRequests, setMaterialRequests] = useState(INITIAL_MATERIAL_REQUESTS);
   const [verifications, setVerifications] = useState(INITIAL_REPAIR_VERIFICATIONS);
   const [duplicates, setDuplicates] = useState(INITIAL_DUPLICATES);
-  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(null);
+  const [notificationError, setNotificationError] = useState('');
+  const reportNotificationError = (message) => setNotificationError(message || 'Could not load notifications.');
   const [auditLogs, setAuditLogs] = useState(INITIAL_AUDIT_LOGS);
   const [users, setUsers] = useState(INITIAL_USERS);
   const [departments, setDepartments] = useState(INITIAL_DEPARTMENTS);
@@ -251,19 +255,8 @@ export function CivicProvider({ children }) {
   };
 
   // Helper to push notification
-  const pushNotification = (role, title, message, linkId, type = 'GENERAL') => {
-    const newNotif = {
-      id: `NOTIF-${Date.now().toString().slice(-4)}`,
-      role,
-      type,
-      title,
-      message,
-      timestamp: nowString(),
-      read: false,
-      linkId,
-    };
-    setNotifications((prev) => [newNotif, ...prev]);
-  };
+  // Notification state is populated exclusively from authenticated API records.
+  const pushNotification = () => {};
 
 
   // ==========================================
@@ -320,18 +313,26 @@ export function CivicProvider({ children }) {
     setComplaints([...uniqueRecords.values()]);
   };
 
-  const syncPersistedNotifications = (records = []) => {
+  const syncPersistedNotifications = (records = [], unreadCount = null) => {
     setNotifications(records.map((item) => ({
       id: item.id,
       role: (item.targetRole || 'GENERAL').toLowerCase(),
+      type: item.notificationType,
       title: item.title,
       message: item.message,
       timestamp: item.createdAt,
       read: item.isRead,
       linkId: item.linkId || item.complaintId || item.workOrderId,
       complaintId: item.complaintId,
+      complaintCode: item.complaint?.complaintCode,
       workOrderId: item.workOrderId,
+      workOrderCode: item.workOrder?.workOrderCode,
+      relatedEntityType: item.relatedEntityType,
+      relatedEntityId: item.relatedEntityId,
+      targetUrl: item.targetUrl,
     })));
+    setUnreadNotificationCount(unreadCount);
+    setNotificationError('');
   };
 
 
@@ -557,61 +558,40 @@ export function CivicProvider({ children }) {
     logAudit(`${officerProfile.name} (Officer)`, 'ADD_INVENTORY', `Item #${newItem.id}`, `Added ${newItem.name}`);
   };
 
-  const handleMaterialRequest = (requestId, decision, approvedQtyMap, notes) => {
-    const timestamp = nowString();
-    setMaterialRequests((prev) =>
-      prev.map((mr) => {
-        if (mr.id === requestId) {
-          const updatedItems = (mr.items || []).map((item) => {
-            const approved = approvedQtyMap && approvedQtyMap[item.itemId] !== undefined
-              ? approvedQtyMap[item.itemId]
-              : item.requestedQty;
-            return {
-              ...item,
-              approvedQty: decision === 'APPROVED' ? approved : 0,
-            };
-          });
+  const syncOfficerMaterialRequests = (records = []) => {
+    setMaterialRequests(records.map((request) => {
+      const first = request.items?.[0];
+      return {
+        id: request.requestCode || request.id,
+        dbId: request.id,
+        workOrderId: request.workOrder?.workOrderCode || request.workOrderId,
+        complaintId: request.workOrder?.complaint?.complaintCode || request.workOrder?.complaintId || '',
+        requestedBy: request.requestedByName,
+        department: request.workOrder?.department?.name || '',
+        requestDate: request.requestDate,
+        status: request.status,
+        priority: request.priority,
+        items: (request.items || []).map((line) => ({ itemId: line.inventoryItemId, itemName: line.inventoryItem?.name || '', requestedQty: line.requestedQty, approvedQty: line.approvedQty || 0, unit: line.inventoryItem?.unit || '' })),
+        materialName: first?.inventoryItem?.name || '',
+        requestedQty: first?.requestedQty || 0,
+        approvedQty: first?.approvedQty || 0,
+        unit: first?.inventoryItem?.unit || '',
+        reason: request.reason || '',
+        decisionNotes: request.decisionNotes || '',
+      };
+    }));
+  };
 
-          return {
-            ...mr,
-            status: decision === 'APPROVED' ? 'Approved' : 'Rejected',
-            approvedQty: decision === 'APPROVED' ? (mr.requestedQty || mr.items?.[0]?.requestedQty || 0) : 0,
-            decisionNotes: notes || '',
-            items: updatedItems,
-          };
-        }
-        return mr;
-      })
-    );
-
-    // If approved, deduct central municipal warehouse inventory accordingly
-    if (decision === 'APPROVED') {
-      const mr = materialRequests.find((m) => m.id === requestId);
-      if (mr && mr.items) {
-        mr.items.forEach((item) => {
-          const deductAmount = approvedQtyMap && approvedQtyMap[item.itemId] !== undefined
-            ? approvedQtyMap[item.itemId]
-            : item.requestedQty;
-          adjustInventoryStock(item.itemId, -deductAmount, `Dispatched for Work Order #${mr.workOrderId}`);
-        });
-      }
-    }
-
-    // Sync notification to Field Supervisor!
-    pushNotification(
-      'supervisor',
-      `Material Request ${decision === 'APPROVED' ? 'Approved' : 'Rejected'}`,
-      `Officer ${officerProfile.name} ${decision.toLowerCase()} Request #${requestId}. ${notes ? `Notes: "${notes}"` : ''}`,
-      requestId,
-      decision === 'APPROVED' ? 'MATERIAL_APPROVED' : 'MATERIAL_REJECTED'
-    );
-
-    logAudit(
-      `${officerProfile.name} (Officer)`,
-      decision === 'APPROVED' ? 'APPROVE_MATERIAL_REQUEST' : 'REJECT_MATERIAL_REQUEST',
-      `Material Request #${requestId}`,
-      `Decision: ${decision}. Notes: ${notes}`
-    );
+  const handleMaterialRequest = async (requestId, decision, approvedQtyMap, notes) => {
+    const request = materialRequests.find((item) => item.dbId === requestId || item.id === requestId);
+    const result = await reviewOfficerMaterialRequest(request?.dbId || requestId, decision, approvedQtyMap || {}, notes || '');
+    const updated = result?.items ? result : result;
+    const status = updated.status;
+    setMaterialRequests((previous) => previous.map((item) => item.dbId === updated.id || item.id === requestId
+      ? { ...item, status, decisionNotes: updated.decisionNotes || '', items: item.items.map((line) => ({ ...line, approvedQty: updated.items?.find((updatedLine) => updatedLine.inventoryItemId === line.itemId)?.approvedQty || 0 })) }
+      : item));
+    logAudit(`${officerProfile.name} (Officer)`, decision === 'APPROVED' ? 'APPROVE_MATERIAL_REQUEST' : 'REJECT_MATERIAL_REQUEST', `Material Request #${requestId}`, `Decision: ${decision}. Notes: ${notes || ''}`);
+    return updated;
   };
 
   const verifyRepair = (verificationId, decision, remarks) => {
@@ -1337,26 +1317,50 @@ export function CivicProvider({ children }) {
   };
 
   // Notification actions
-  const markNotificationRead = (id) => {
-    markNotificationReadRequest(id).catch(() => {});
+  const markNotificationRead = async (id) => {
+    const notification = notifications.find((item) => item.id === id);
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, read: true } : n))
     );
+    if (notification && !notification.read && unreadNotificationCount !== null) setUnreadNotificationCount((count) => Math.max(0, count - 1));
+    try { await markNotificationReadRequest(id); setNotificationError(''); }
+    catch (error) {
+      if (notification) setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: notification.read } : n));
+      if (notification && !notification.read && unreadNotificationCount !== null) setUnreadNotificationCount((count) => count + 1);
+      setNotificationError(error.message || 'Could not mark notification as read.');
+      throw error;
+    }
   };
 
-  const markAllNotificationsRead = () => {
-    notifications.filter((notification) => !notification.read).forEach((notification) => {
-      markNotificationReadRequest(notification.id).catch(() => {});
-    });
+  const markAllNotificationsRead = async () => {
+    const previous = notifications;
+    const previousUnread = unreadNotificationCount;
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setUnreadNotificationCount(0);
+    try { await markAllNotificationsReadRequest(); setNotificationError(''); }
+    catch (error) {
+      setNotifications(previous);
+      setUnreadNotificationCount(previousUnread);
+      setNotificationError(error.message || 'Could not mark notifications as read.');
+      throw error;
+    }
+  };
+
+  const deleteNotification = async (id) => {
+    const previous = notifications;
+    const notification = notifications.find((item) => item.id === id);
+    setNotifications((prev) => prev.filter((item) => item.id !== id));
+    if (notification && !notification.read && unreadNotificationCount !== null) setUnreadNotificationCount((count) => Math.max(0, count - 1));
+    try { await deleteNotificationRequest(id); setNotificationError(''); }
+    catch (error) {
+      setNotifications(previous);
+      if (notification && !notification.read && unreadNotificationCount !== null) setUnreadNotificationCount((count) => count + 1);
+      setNotificationError(error.message || 'Could not delete notification.');
+      throw error;
+    }
   };
 
   // Profile actions
-  const updateCitizenProfile = (updated) => {
-    setCitizenProfile((prev) => ({ ...prev, ...updated }));
-    logAudit(`${citizenProfile.name} (Citizen)`, 'UPDATE_PROFILE', 'Citizen Account', 'Updated profile information.');
-  };
-
   const updateOfficerProfile = (updated) => {
     setOfficerProfile((prev) => ({ ...prev, ...updated }));
     logAudit(`${officerProfile.name} (Officer)`, 'UPDATE_PROFILE', 'Officer Account', 'Updated officer contact details.');
@@ -1514,6 +1518,9 @@ export function CivicProvider({ children }) {
         verifications,
         duplicates,
         notifications,
+        unreadNotificationCount,
+        notificationError,
+        reportNotificationError,
         auditLogs,
         // Supervisor states
         workers,
@@ -1528,6 +1535,7 @@ export function CivicProvider({ children }) {
         syncPersistedComplaints,
         // Officer actions
         syncPersistedNotifications,
+        syncOfficerMaterialRequests,
         approveComplaint,
         rejectComplaint,
         createWorkOrder,
@@ -1556,6 +1564,7 @@ export function CivicProvider({ children }) {
         // Notification actions
         markNotificationRead,
         markAllNotificationsRead,
+        deleteNotification,
         users,
         departments,
         addUser,

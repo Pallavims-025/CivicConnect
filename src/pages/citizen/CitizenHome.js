@@ -19,9 +19,7 @@ export function CitizenHome() {
   const { complaints, citizenProfile } = useCivic();
 
   // Filter complaints for this citizen
-  const myComplaints = complaints.filter(
-    (c) => c.citizenId === citizenProfile.id || c.citizenName === citizenProfile.name
-  );
+  const myComplaints = complaints.filter((c) => c.citizenId === citizenProfile.id);
 
   const totalCount = myComplaints.length;
   const pendingCount = myComplaints.filter(
@@ -35,15 +33,11 @@ export function CitizenHome() {
       {/* Welcome Banner */}
       <div className="bg-gradient-to-r from-[#163A63] to-civic-blue text-white rounded-2xl p-6 md:p-8 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <span className="text-blue-200 text-xs font-semibold uppercase tracking-wider">
-            Citizen Dashboard
-          </span>
           <h2 className="text-2xl md:text-3xl font-extrabold mt-1">
-            Welcome back, {citizenProfile.name}!
+            {citizenProfile.name ? `Welcome back, ${citizenProfile.name}!` : 'Welcome'}
           </h2>
           <p className="text-blue-100 text-xs md:text-sm mt-1 max-w-xl">
-            Empowering citizens to report public issues and build cleaner, safer urban neighborhoods.
-            Track your reports or lodge a new issue below.
+            Track your reports or submit a new issue.
           </p>
         </div>
 
@@ -112,7 +106,6 @@ export function CitizenHome() {
         <div className="p-5 md:px-6 flex items-center justify-between border-b border-slate-100">
           <div>
             <h3 className="font-bold text-base text-civic-text">Recent Complaints</h3>
-            <p className="text-xs text-civic-muted">Your latest civic issue submissions and current municipal status</p>
           </div>
           <button
             onClick={() => navigate('/citizen/complaints')}
@@ -129,9 +122,6 @@ export function CitizenHome() {
               <FileText className="w-6 h-6" />
             </div>
             <h4 className="font-bold text-sm text-slate-800">No complaints reported yet</h4>
-            <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
-              Have you noticed potholes, broken lights, or uncleared garbage in your neighborhood? Submit your first report now.
-            </p>
             <button
               onClick={() => navigate('/citizen/report')}
               className="px-4 py-2 bg-civic-blue text-white rounded-xl text-xs font-semibold hover:bg-blue-700"

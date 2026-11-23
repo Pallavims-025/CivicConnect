@@ -158,6 +158,8 @@ model User {
   avatarUrl    String?   @map("avatar_url") @db.VarChar(1000)
   ward         String?   @db.VarChar(100)
   address      String?   @db.VarChar(500)
+  alternateContactNumber String? @map("alternate_contact_number") @db.VarChar(50)
+  preferredLanguage String? @map("preferred_language") @db.VarChar(80)
   title        String?   @db.VarChar(150)
   departmentId Int?      @map("department_id")
   wardCoverage String?   @map("ward_coverage") @db.VarChar(255)
@@ -620,7 +622,11 @@ model Notification {
   complaintId      String?          @map("complaint_id") @db.VarChar(36)
   workOrderId      String?          @map("work_order_id") @db.VarChar(36)
   linkId           String?          @map("link_id") @db.VarChar(100)
+  relatedEntityType String?         @map("related_entity_type") @db.VarChar(40)
+  relatedEntityId  String?          @map("related_entity_id") @db.VarChar(100)
+  targetUrl        String?          @map("target_url") @db.VarChar(500)
   isRead           Boolean          @default(false) @map("is_read")
+  readAt           DateTime?        @map("read_at")
   createdAt        DateTime         @default(now()) @map("created_at")
 
   // Relationships
@@ -629,6 +635,7 @@ model Notification {
   workOrder WorkOrder? @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
 
   @@index([userId])
+  @@index([userId, isRead, createdAt])
   @@index([targetRole, isRead])
   @@index([createdAt])
   @@map("notifications")

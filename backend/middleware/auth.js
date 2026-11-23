@@ -63,6 +63,8 @@ export async function authenticate(req, res, next) {
         avatarUrl: true,
         ward: true,
         address: true,
+        alternateContactNumber: true,
+        preferredLanguage: true,
         title: true,
         departmentId: true,
         wardCoverage: true,

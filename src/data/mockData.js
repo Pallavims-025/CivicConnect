@@ -20,7 +20,7 @@ export const INITIAL_CITIZEN = {
   ward: 'Ward 14 - Indiranagar',
   address: '42, 12th Main Road, HAL 2nd Stage, Indiranagar',
   joinedDate: '2026-01-15',
-  avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
+  avatarUrl: '',
 };
 
 export const INITIAL_OFFICER = {

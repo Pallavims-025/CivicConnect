@@ -46,6 +46,7 @@ export function InventoryMaterials() {
   const [decisionModalReq, setDecisionModalReq] = useState(null);
   const [decisionType, setDecisionType] = useState('APPROVED');
   const [decisionNotes, setDecisionNotes] = useState('Approved according to standard ward allocation.');
+  const [decisionError, setDecisionError] = useState('');
 
   const filteredInventory = inventory.filter(
     (item) =>
@@ -80,11 +81,14 @@ export function InventoryMaterials() {
     setNewDesc('');
   };
 
-  const handleDecisionSubmit = (e) => {
+  const handleDecisionSubmit = async (e) => {
     e.preventDefault();
     if (!decisionModalReq) return;
-    handleMaterialRequest(decisionModalReq.id, decisionType, null, decisionNotes);
-    setDecisionModalReq(null);
+    try {
+      await handleMaterialRequest(decisionModalReq.dbId || decisionModalReq.id, decisionType, null, decisionNotes);
+      setDecisionError('');
+      setDecisionModalReq(null);
+    } catch (error) { setDecisionError(error.message || 'The request decision could not be saved.'); }
   };
 
   return (
@@ -462,6 +466,7 @@ export function InventoryMaterials() {
             </p>
 
             <form onSubmit={handleDecisionSubmit} className="space-y-4 text-xs">
+              {decisionError && <p role="alert" className="rounded-lg bg-rose-50 p-2 text-rose-700">{decisionError}</p>}
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Decision Remarks</label>
                 <textarea

@@ -1,201 +1,70 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import {
-  User,
-  Mail,
-  Phone,
-  MapPin,
-  Calendar,
-  Save,
-  X,
-  ShieldCheck,
-  LogOut,
-  Info,
-} from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Camera, MapPin, Mail, Phone, Trash2 } from 'lucide-react';
 import { useCivic } from '../../context/CivicContext';
 import { useAuth } from '../../context/AuthContext';
+import { getMyComplaints, updateCitizenProfileRequest } from '../../services/api';
+
+const initials = (name = '') => name.trim().split(/\s+/).filter(Boolean).map((part) => part[0]).slice(0, 2).join('').toUpperCase() || '?';
+const dateLabel = (date) => date ? new Date(date).toLocaleDateString() : '—';
 
 export function CitizenProfile() {
-  const navigate = useNavigate();
   const { citizenProfile, updateCitizenProfile } = useCivic();
-  const profile = citizenProfile;
-  const { logout } = useAuth();
+  const { refreshUser } = useAuth();
+  const inputRef = useRef(null);
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState(citizenProfile);
+  const [complaints, setComplaints] = useState([]);
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
+  useEffect(() => setForm(citizenProfile), [citizenProfile]);
+  useEffect(() => { getMyComplaints().then(setComplaints).catch(() => setError('Could not load your complaints.')); }, []);
 
-  const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState(profile);
-  const [savedSuccess, setSavedSuccess] = useState(false);
-
-  useEffect(() => setFormData(profile), [profile]);
-
-  const handleSave = (e) => {
-    e.preventDefault();
-    updateCitizenProfile(formData);
-    setIsEditing(false);
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 3000);
+  const save = async (event) => {
+    event.preventDefault(); setError('');
+    try {
+      const result = await updateCitizenProfileRequest({ name: form.name, alternateContactNumber: form.alternateContactNumber || null, address: form.address || '', preferredLanguage: form.preferredLanguage || null });
+      updateCitizenProfile(result.user); await refreshUser(); setEditing(false); setSaved(true);
+    } catch (err) { setError(err.message || 'Profile could not be saved.'); }
   };
+  const uploadPhoto = (event) => {
+    const file = event.target.files?.[0]; event.target.value = '';
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024) { setError('Choose a JPEG, PNG, or WebP image under 2 MB.'); return; }
+    const reader = new FileReader(); reader.onload = async () => {
+      try { const result = await updateCitizenProfileRequest({ avatarUrl: reader.result }); updateCitizenProfile(result.user); await refreshUser(); setError(''); }
+      catch (err) { setError(err.message || 'Photo could not be saved.'); }
+    }; reader.readAsDataURL(file);
+  };
+  const removePhoto = async () => { try { const result = await updateCitizenProfileRequest({ avatarUrl: null }); updateCitizenProfile(result.user); await refreshUser(); } catch (err) { setError(err.message); } };
 
-  return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div>
-        <h2 className="text-xl md:text-2xl font-extrabold text-civic-text">
-          Citizen Profile
-        </h2>
-        <p className="text-xs text-civic-muted">
-          Manage your personal contact details, residential ward, and notification preferences.
-        </p>
-      </div>
-
-      {savedSuccess && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl p-4 text-xs">
-          Profile changes successfully saved to local session.
-        </div>
-      )}
-
-      {/* Demo notice */}
-      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-800 flex items-start space-x-2">
-        <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-        <div>
-          <span className="font-bold">Frontend Demonstration Stage:</span> Profile data is managed in
-          shared client state during the preview session. In full deployment, this integrates securely
-          with municipal identity single sign-on.
+  return <div className="max-w-3xl mx-auto space-y-6">
+    <h2 className="text-xl md:text-2xl font-extrabold text-civic-text">Profile</h2>
+    {error && <p role="alert" className="rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
+    {saved && <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">Profile saved.</p>}
+    <section className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200 shadow-xs space-y-6">
+      <div className="flex items-center gap-4 pb-5 border-b border-slate-100">
+        {citizenProfile.avatarUrl ? <img src={citizenProfile.avatarUrl} alt={citizenProfile.name} className="w-16 h-16 rounded-full object-cover ring-4 ring-blue-50" /> : <div className="w-16 h-16 rounded-full bg-civic-blue text-white flex items-center justify-center text-lg font-bold">{initials(citizenProfile.name)}</div>}
+        <div className="flex-1"><h3 className="text-lg font-bold text-slate-900">{citizenProfile.name}</h3><p className="text-sm text-slate-500">{citizenProfile.email}</p>
+          <button type="button" onClick={() => inputRef.current?.click()} className="mt-2 text-xs font-semibold text-civic-blue inline-flex gap-1"><Camera className="w-4 h-4"/>Upload or change photo</button>
+          {citizenProfile.avatarUrl && <button type="button" onClick={removePhoto} className="ml-4 text-xs text-rose-600 inline-flex gap-1"><Trash2 className="w-4 h-4"/>Remove</button>}
+          <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={uploadPhoto} className="hidden" />
         </div>
       </div>
-
-      <div className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200 shadow-xs space-y-6">
-        <div className="flex items-center space-x-4 pb-6 border-b border-slate-100">
-          <img
-            src={profile.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'}
-            alt={profile.name}
-            className="w-16 h-16 rounded-2xl object-cover ring-4 ring-blue-50"
-          />
-          <div>
-            <h3 className="text-lg font-bold text-slate-900">{profile.name}</h3>
-            <p className="text-xs text-slate-500">{profile.ward}</p>
-            <span className="inline-block px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded-md border border-emerald-200 mt-1">
-              Verified Citizen Account
-            </span>
-          </div>
+      {editing ? <form onSubmit={save} className="space-y-4">
+        <label className="block text-xs font-semibold">Full name<input required minLength="2" value={form.name || ''} onChange={(e) => setForm({...form,name:e.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <label className="block text-xs font-semibold">Email<input readOnly value={citizenProfile.email || ''} className="mt-1 w-full rounded-xl border bg-slate-50 p-3"/></label>
+          <label className="block text-xs font-semibold">Primary contact<input readOnly value={citizenProfile.phone || ''} className="mt-1 w-full rounded-xl border bg-slate-50 p-3"/></label>
+          <label className="block text-xs font-semibold">Alternate contact number<input type="tel" value={form.alternateContactNumber || ''} onChange={(e) => setForm({...form,alternateContactNumber:e.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label>
+          <label className="block text-xs font-semibold">Preferred language<select value={form.preferredLanguage || ''} onChange={(e) => setForm({...form,preferredLanguage:e.target.value})} className="mt-1 w-full rounded-xl border p-3"><option value="">Select language</option>{['English','ಕನ್ನಡ','हिन्दी','தமிழ்','తెలుగు','اردو'].map(x=><option key={x}>{x}</option>)}</select></label>
         </div>
-
-        {isEditing ? (
-          <form onSubmit={handleSave} className="space-y-4">
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Full Name</label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-civic-blue outline-hidden"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-civic-blue outline-hidden"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Phone Number</label>
-                <input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-civic-blue outline-hidden"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Assigned Ward</label>
-                <input
-                  type="text"
-                  value={formData.ward}
-                  onChange={(e) => setFormData({ ...formData, ward: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-civic-blue outline-hidden"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Residential Address</label>
-              <textarea
-                rows={2}
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-civic-blue outline-hidden"
-              />
-            </div>
-
-            <div className="flex items-center justify-end space-x-3 pt-4 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => {
-                  setFormData(profile);
-                  setIsEditing(false);
-                }}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-5 py-2 rounded-xl text-xs font-bold bg-civic-blue text-white hover:bg-blue-700"
-              >
-                Save Changes
-              </button>
-            </div>
-          </form>
-        ) : (
-          <div className="space-y-4 text-xs">
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-                <span className="text-slate-400 font-medium block mb-0.5">Email Address</span>
-                <span className="font-semibold text-slate-800">{profile.email}</span>
-              </div>
-              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-                <span className="text-slate-400 font-medium block mb-0.5">Phone Number</span>
-                <span className="font-semibold text-slate-800">{profile.phone}</span>
-              </div>
-              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-                <span className="text-slate-400 font-medium block mb-0.5">Primary Ward</span>
-                <span className="font-semibold text-slate-800">{profile.ward}</span>
-              </div>
-              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-                <span className="text-slate-400 font-medium block mb-0.5">Member Since</span>
-                <span className="font-semibold text-slate-800">{profile.joinedDate}</span>
-              </div>
-            </div>
-
-            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-              <span className="text-slate-400 font-medium block mb-0.5">Residential Address</span>
-              <span className="font-semibold text-slate-800">{profile.address}</span>
-            </div>
-
-            <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-              <button
-                onClick={() => setIsEditing(true)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition-colors"
-              >
-                Edit Profile
-              </button>
-
-              <button
-                onClick={() => logout().then(() => navigate('/login', { replace: true }))}
-                className="text-rose-600 hover:text-rose-700 font-semibold text-xs flex items-center space-x-1"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>Sign Out</span>
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+        <label className="block text-xs font-semibold">Address<textarea rows="3" value={form.address || ''} onChange={(e) => setForm({...form,address:e.target.value})} className="mt-1 w-full rounded-xl border p-3"/></label>
+        <div className="flex justify-end gap-2"><button type="button" onClick={()=>{setForm(citizenProfile);setEditing(false);setError('');}} className="px-4 py-2 rounded-xl bg-slate-100">Cancel</button><button className="px-4 py-2 rounded-xl bg-civic-blue text-white">Save changes</button></div>
+      </form> : <>
+        <div className="grid sm:grid-cols-2 gap-3 text-sm">{[['Email',citizenProfile.email,Mail],['Contact',citizenProfile.phone,Phone],['Alternate contact',citizenProfile.alternateContactNumber],['Address',citizenProfile.address,MapPin],['Preferred language',citizenProfile.preferredLanguage]].map(([label,value,Icon])=><div key={label} className="rounded-xl border bg-slate-50 p-3"><span className="text-slate-500">{Icon && <Icon className="inline w-4 h-4 mr-1"/>}{label}</span><div className="font-semibold mt-1">{value || 'Not provided'}</div></div>)}</div>
+        <button onClick={()=>{setSaved(false);setEditing(true);}} className="px-4 py-2 rounded-xl bg-slate-100 font-bold text-sm">Edit profile</button>
+      </>}
+    </section>
+    <section className="bg-white rounded-3xl p-6 border border-slate-200"><h3 className="font-bold text-slate-900 mb-4">My complaints</h3>{complaints.length ? <ul className="divide-y">{complaints.map(c=><li key={c.databaseId || c.id} className="py-3 flex flex-wrap justify-between gap-2 text-sm"><div><strong>{c.title || c.category}</strong><p className="text-slate-500">{c.id} · {dateLabel(c.reportedDate)}{c.address ? ` · ${c.address}` : ''}</p></div><span className="font-semibold">{c.status?.replaceAll('_',' ')}</span></li>)}</ul> : <p className="text-sm text-slate-500">No complaints submitted yet.</p>}</section>
+  </div>;
 }

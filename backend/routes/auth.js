@@ -8,6 +8,8 @@ import {
   approveOfficer,
   listUsers,
   updateUserStatus,
+  updateCitizenProfile,
+  updateOfficerProfile,
 } from '../controllers/authController.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 
@@ -19,6 +21,8 @@ router.post('/login', login);
 
 // Authenticated routes
 router.get('/me', authenticate, me);
+router.patch('/citizen-profile', authenticate, authorize('CITIZEN'), updateCitizenProfile);
+router.patch('/officer-profile', authenticate, authorize('OFFICER'), updateOfficerProfile);
 router.post('/logout', authenticate, logout);
 
 // Admin-only routes

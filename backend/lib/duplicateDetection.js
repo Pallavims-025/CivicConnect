@@ -58,7 +58,7 @@ function photoSimilarity(newPhotos, existingPhotos) {
   return best;
 }
 
-function compareComplaint(incoming, existing, radiusMeters, dateWindowDays) {
+export function compareComplaints(incoming, existing, radiusMeters, dateWindowDays) {
   const scores = {
     title: textSimilarity(incoming.title, existing.title),
     description: textSimilarity(incoming.description, existing.description),
@@ -127,9 +127,49 @@ export async function findDuplicateCandidates(prisma, complaint) {
     matchedComplaintId: record.id,
     matchedComplaintCode: record.complaintCode || record.id,
     record,
-    ...compareComplaint({ ...complaint, createdAt: new Date() }, record, radiusMeters, dateWindowDays),
+    ...compareComplaints({ ...complaint, createdAt: new Date() }, record, radiusMeters, dateWindowDays),
   }))
     .filter((candidate) => candidate.classification !== 'NEW')
     .sort((a, b) => b.similarityScore - a.similarityScore)
     .slice(0, 5);
+}
+
+export async function refreshDuplicateCandidates(prisma) {
+  const dateWindowDays = boundedNumber(process.env.DUPLICATE_DATE_WINDOW_DAYS, 45, 1, 365);
+  const radiusMeters = boundedNumber(process.env.DUPLICATE_RADIUS_METERS, 300, 25, 5000);
+  const possibleThreshold = boundedNumber(process.env.DUPLICATE_POSSIBLE_THRESHOLD, 0.55, 0.3, 0.9);
+  const records = await prisma.complaint.findMany({
+    where: { createdAt: { gte: new Date(Date.now() - dateWindowDays * 86400000) } },
+    select: {
+      id: true, complaintCode: true, title: true, description: true, categoryId: true,
+      address: true, latitude: true, longitude: true, createdAt: true, duplicateOfId: true,
+      photos: { select: { perceptualHash: true } },
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+  for (let i = 0; i < records.length - 1; i += 1) {
+    for (let j = i + 1; j < records.length; j += 1) {
+      const older = records[i];
+      const newer = records[j];
+      if (newer.duplicateOfId || older.duplicateOfId) continue;
+      const result = compareComplaints(newer, older, radiusMeters, dateWindowDays);
+      if (result.similarityScore < possibleThreshold) continue;
+      const prior = await prisma.duplicateComplaintMatch.findUnique({
+        where: { complaintId_matchedComplaintId: { complaintId: newer.id, matchedComplaintId: older.id } },
+        select: { id: true, decision: true },
+      });
+      if (prior) {
+        if (prior.decision === 'PENDING' || prior.decision === 'KEEP_REVIEWING') {
+          await prisma.duplicateComplaintMatch.update({ where: { id: prior.id }, data: {
+            similarityScore: result.similarityScore, classification: result.classification, comparison: result.comparison,
+          } });
+        }
+        continue;
+      }
+      await prisma.duplicateComplaintMatch.create({ data: {
+        complaintId: newer.id, matchedComplaintId: older.id,
+        similarityScore: result.similarityScore, classification: result.classification, comparison: result.comparison,
+      } });
+    }
+  }
 }

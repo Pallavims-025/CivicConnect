@@ -9,16 +9,20 @@ import {
   MapPin,
   Save,
   LogOut,
-  Info,
+  Camera,
+  Trash2,
 } from 'lucide-react';
 import { useCivic } from '../../context/CivicContext';
 import { useAuth } from '../../context/AuthContext';
+import { updateOfficerProfileRequest } from '../../services/api';
 
 export function OfficerProfile() {
   const navigate = useNavigate();
   const { officerProfile, updateOfficerProfile } = useCivic();
   const profile = officerProfile;
-  const { logout } = useAuth();
+  const { logout, refreshUser } = useAuth();
+  const [error, setError] = useState('');
+  const [photoBusy, setPhotoBusy] = useState(false);
 
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState(profile);
@@ -28,10 +32,7 @@ export function OfficerProfile() {
 
   const handleSave = (e) => {
     e.preventDefault();
-    updateOfficerProfile(formData);
-    setIsEditing(false);
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 3000);
+    updateOfficerProfileRequest({name:formData.name,phone:formData.phone,alternateContactNumber:formData.alternateContactNumber,address:formData.address,preferredLanguage:formData.preferredLanguage,avatarUrl:formData.avatarUrl}).then((updated)=>{updateOfficerProfile(updated);refreshUser();setIsEditing(false);setSavedSuccess(true);}).catch((err)=>setError(err.message));
   };
 
   return (
@@ -54,11 +55,11 @@ export function OfficerProfile() {
 
       <div className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200 shadow-xs space-y-6">
         <div className="flex items-center space-x-4 pb-6 border-b border-slate-100">
-          <img
-            src={profile.avatarUrl || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80'}
+          {profile.avatarUrl ? <img
+            src={profile.avatarUrl}
             alt={profile.name}
             className="w-16 h-16 rounded-2xl object-cover ring-4 ring-blue-50"
-          />
+          /> : <div className="w-16 h-16 rounded-full bg-civic-blue text-white flex items-center justify-center text-lg font-bold">{(profile.name||'').trim().split(/\s+/).filter(Boolean).map(x=>x[0]).slice(0,2).join('').toUpperCase()}</div>}
           <div>
             <h3 className="text-lg font-bold text-slate-900">{profile.name}</h3>
             <p className="text-xs text-slate-500">{profile.title}</p>
@@ -184,6 +185,7 @@ export function OfficerProfile() {
           </div>
         )}
       </div>
+      {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}
     </div>
   );
 }
