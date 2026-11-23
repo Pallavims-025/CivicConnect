@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { API_BASE_URL } from '../services/api';
 
 const AuthContext = createContext(null);
 
 const TOKEN_KEY = 'cc_auth_token';
 const OFFLINE_USER_KEY = 'cc_offline_user';
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
+const API_BASE = API_BASE_URL;
 
 async function apiFetch(path, options = {}) {
   const token = localStorage.getItem(TOKEN_KEY);

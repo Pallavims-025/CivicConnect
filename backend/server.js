@@ -9,7 +9,27 @@ import { fileURLToPath } from 'node:url';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const CLIENT_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
+const CLIENT_ORIGINS = (process.env.CORS_ORIGIN || 'http://localhost:5173')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+function isLocalDevelopmentOrigin(origin) {
+  if (process.env.NODE_ENV === 'production') return false;
+  try {
+    const url = new URL(origin);
+    if (url.protocol !== 'http:') return false;
+    const host = url.hostname.toLowerCase();
+    if (['localhost', '127.0.0.1', '::1'].includes(host)) return true;
+    const octets = host.split('.').map(Number);
+    if (octets.length !== 4 || octets.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false;
+    return octets[0] === 10
+      || (octets[0] === 192 && octets[1] === 168)
+      || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31);
+  } catch {
+    return false;
+  }
+}
 
 if (hasAdminConfig()) {
   const result = await ensureConfiguredAdmin(prisma);
@@ -23,10 +43,10 @@ app.use(
     origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps, curl, or server-to-server)
       if (!origin) return callback(null, true);
-      if (origin === CLIENT_ORIGIN) {
+      if (CLIENT_ORIGINS.includes(origin)) {
         return callback(null, true);
       }
-      if (process.env.NODE_ENV !== 'production' && origin.startsWith('http://localhost:')) {
+      if (isLocalDevelopmentOrigin(origin)) {
         return callback(null, true);
       }
       return callback(new Error('Origin is not allowed by CORS.'));
