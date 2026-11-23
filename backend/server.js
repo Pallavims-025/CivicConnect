@@ -5,6 +5,7 @@ import apiRoutes from './routes/index.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { prisma } from './lib/prisma.js';
 import { ensureConfiguredAdmin, hasAdminConfig } from './lib/adminBootstrap.js';
+import { fileURLToPath } from 'node:url';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -36,6 +37,11 @@ app.use(
 
 app.use(express.json({ limit: '45mb' }));
 app.use(express.urlencoded({ extended: true }));
+app.use('/uploads/supervisor-avatars', express.static(fileURLToPath(new URL('./uploads/supervisor-avatars/', import.meta.url)), {
+  dotfiles: 'deny',
+  index: false,
+  maxAge: '1h',
+}));
 
 // Root welcome endpoint
 app.get('/', (req, res) => {

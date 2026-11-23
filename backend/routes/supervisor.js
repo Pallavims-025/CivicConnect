@@ -4,6 +4,8 @@ import {
   getSupervisorProfile,
   getSupervisorDashboardData,
   updateSupervisorProfile,
+  uploadSupervisorProfilePhoto,
+  removeSupervisorProfilePhoto,
   updateWorkOrderCrew,
   addWorkOrderNote,
   getSupervisorWorkOrders,
@@ -25,6 +27,8 @@ router.use(authenticate, authorize('SUPERVISOR'));
 // GET /api/supervisor/profile
 router.get('/profile', getSupervisorProfile);
 router.put('/profile', updateSupervisorProfile);
+router.post('/profile/photo', uploadSupervisorProfilePhoto);
+router.delete('/profile/photo', removeSupervisorProfilePhoto);
 router.get('/dashboard-data', getSupervisorDashboardData);
 router.put('/work-orders/:id/crew', updateWorkOrderCrew);
 router.post('/work-orders/:id/notes', addWorkOrderNote);

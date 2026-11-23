@@ -1,7 +1,21 @@
 import { prisma } from '../lib/prisma.js';
 import { parseComplaintPhotos } from '../lib/photoUtils.js';
 import { randomUUID } from 'node:crypto';
+import { mkdir, writeFile, unlink } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { notifyUser } from '../lib/notificationService.js';
+
+const supervisorAvatarDirectory = new URL('../uploads/supervisor-avatars/', import.meta.url);
+const supervisorAvatarPath = fileURLToPath(supervisorAvatarDirectory);
+const supervisorAvatarUrlPattern = /^\/uploads\/supervisor-avatars\/[a-f\d-]+\.(?:jpg|png)$/i;
+
+async function removeSupervisorAvatar(avatarUrl) {
+  if (!supervisorAvatarUrlPattern.test(avatarUrl || '')) return;
+  try { await unlink(path.join(supervisorAvatarPath, path.basename(avatarUrl))); } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+}
 
 const workOrderInclude = {
   department: true,
@@ -50,6 +64,65 @@ export async function updateSupervisorProfile(req, res, next) {
     const profile = await prisma.user.update({ where: { id: req.user.id }, data: {
       name: name.trim(), phone: phone?.trim() || null, title: title?.trim() || null, wardCoverage: wardCoverage?.trim() || null,
     }, select: { id: true, name: true, email: true, phone: true, avatarUrl: true, title: true, wardCoverage: true, department: { select: { id: true, name: true } } } });
+    res.json({ success: true, data: profile });
+  } catch (error) { next(error); }
+}
+
+export async function uploadSupervisorProfilePhoto(req, res, next) {
+  let createdFilePath;
+  try {
+    const { imageData } = req.body;
+    const match = typeof imageData === 'string' && imageData.match(/^data:image\/(jpeg|png);base64,([A-Za-z0-9+/]+={0,2})$/);
+    if (!match) return res.status(422).json({ success: false, error: { message: 'Choose a valid JPG or PNG image.' } });
+
+    const [, format, encoded] = match;
+    const image = Buffer.from(encoded, 'base64');
+    if (!image.length || image.length > 2 * 1024 * 1024) {
+      return res.status(422).json({ success: false, error: { message: 'Photo must be 2 MB or smaller.' } });
+    }
+    const isJpeg = format === 'jpeg' && image[0] === 0xff && image[1] === 0xd8 && image[2] === 0xff;
+    const isPng = format === 'png' && image.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    if (!isJpeg && !isPng) {
+      return res.status(422).json({ success: false, error: { message: 'The photo contents do not match a supported JPG or PNG image.' } });
+    }
+
+    const extension = isJpeg ? 'jpg' : 'png';
+    const fileName = `${randomUUID()}.${extension}`;
+    await mkdir(supervisorAvatarPath, { recursive: true });
+    createdFilePath = path.join(supervisorAvatarPath, fileName);
+    await writeFile(createdFilePath, image, { flag: 'wx', mode: 0o644 });
+
+    const avatarUrl = `/uploads/supervisor-avatars/${fileName}`;
+    const profile = await prisma.user.update({
+      where: { id: req.user.id },
+      data: { avatarUrl },
+      select: { id: true, name: true, email: true, phone: true, avatarUrl: true, title: true, wardCoverage: true, department: { select: { id: true, name: true } } },
+    });
+
+    const previousAvatar = req.user.avatarUrl;
+    if (previousAvatar && previousAvatar !== avatarUrl) {
+      try { await removeSupervisorAvatar(previousAvatar); } catch {}
+    }
+    res.json({ success: true, data: profile });
+  } catch (error) {
+    if (createdFilePath) {
+      try { await unlink(createdFilePath); } catch {}
+    }
+    next(error);
+  }
+}
+
+export async function removeSupervisorProfilePhoto(req, res, next) {
+  try {
+    const existing = await prisma.user.findUnique({ where: { id: req.user.id }, select: { avatarUrl: true } });
+    const profile = await prisma.user.update({
+      where: { id: req.user.id },
+      data: { avatarUrl: null },
+      select: { id: true, name: true, email: true, phone: true, avatarUrl: true, title: true, wardCoverage: true, department: { select: { id: true, name: true } } },
+    });
+    if (existing?.avatarUrl) {
+      try { await removeSupervisorAvatar(existing.avatarUrl); } catch {}
+    }
     res.json({ success: true, data: profile });
   } catch (error) { next(error); }
 }

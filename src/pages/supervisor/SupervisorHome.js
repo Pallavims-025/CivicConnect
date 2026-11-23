@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useCivic } from '../../context/CivicContext';
 import { PriorityBadge, StatusBadge } from '../../components/common/StatusBadge';
+import { SupervisorMaterialPicker } from './SupervisorMaterialPicker';
 
 export function SupervisorHome() {
   const navigate = useNavigate();
@@ -95,11 +96,6 @@ export function SupervisorHome() {
     .filter((m) => m.status === 'Pending Approval' || m.status === 'PENDING')
     .slice(0, 3);
 
-  const lowStockAlerts = inventory
-    .filter((item) => item.availableQuantity <= item.minThreshold)
-    .slice(0, 4)
-    .map((item) => ({ materialName: item.name, remainingQuantity: item.availableQuantity, unit: item.unit }));
-
   // Handlers for Quick Action Modals
   const handleAssignWorkerSubmit = async (e) => {
     e.preventDefault();
@@ -148,7 +144,7 @@ export function SupervisorHome() {
 
   const handleMaterialRequestSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedWO || !matName || !matQty) {
+    if (!selectedWO || !inventory.some((item) => item.name === matName) || !matQty) {
       alert('Please specify work order, material name, and quantity.');
       return;
     }
@@ -186,9 +182,6 @@ export function SupervisorHome() {
           <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight">
             Welcome, {supervisorProfile.name}
           </h2>
-          <p className="text-blue-100 text-xs md:text-sm mt-1 max-w-xl">
-            On-site field operations management. Track assigned repairs, dispatch specialized field workers, manage site inventory, and submit photo verification.
-          </p>
       </div>
 
       {myWorkOrders.length === 0 && (
@@ -318,7 +311,7 @@ export function SupervisorHome() {
 
           {/* Card 3: Completed Tasks */}
           <div
-            onClick={() => navigate('/supervisor/worker-assignments')}
+            onClick={() => navigate('/supervisor/repair-progress')}
             className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group"
           >
             <div className="flex items-center justify-between">
@@ -348,7 +341,7 @@ export function SupervisorHome() {
 
           {/* Card 5: Active Workers */}
           <div
-            onClick={() => navigate('/supervisor/worker-assignments')}
+            onClick={() => navigate('/supervisor/repair-progress')}
             className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group"
           >
             <div className="flex items-center justify-between">
@@ -477,72 +470,6 @@ export function SupervisorHome() {
             </div>
           </div>
 
-          {/* Worker Task Status & Breakdown */}
-          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-              <div>
-                <h3 className="text-base font-bold text-slate-900 flex items-center space-x-2">
-                  <Users className="w-4 h-4 text-indigo-600" />
-                  <span>Worker Task Status</span>
-                </h3>
-                <p className="text-xs text-slate-500">Active repair assignments and sub-task progress</p>
-              </div>
-              <button
-                onClick={() => navigate('/supervisor/worker-assignments')}
-                className="text-xs text-civic-blue hover:underline font-semibold flex items-center space-x-1"
-              >
-                <span>Manage roster</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-slate-100 text-slate-400 font-semibold">
-                    <th className="pb-3">Task ID</th>
-                    <th className="pb-3">Worker</th>
-                    <th className="pb-3">Task Description</th>
-                    <th className="pb-3">Progress</th>
-                    <th className="pb-3">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-700">
-                  {workerTasks.slice(0, 5).map((t) => (
-                    <tr key={t.id} className="hover:bg-slate-50/50">
-                      <td className="py-3 font-mono font-bold text-slate-800">{t.id}</td>
-                      <td className="py-3 font-medium text-slate-900">
-                        {t.workerName}
-                        <p className="text-[10px] text-slate-400">{t.workerRole}</p>
-                      </td>
-                      <td className="py-3 text-slate-600 max-w-xs truncate">{t.taskDescription}</td>
-                      <td className="py-3">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-bold">{t.progress}%</span>
-                        </div>
-                      </td>
-                      <td className="py-3">
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            t.status === 'Completed'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : t.status === 'Blocked'
-                              ? 'bg-rose-100 text-rose-800'
-                              : t.status === 'In Progress'
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-slate-100 text-slate-700'
-                          }`}
-                        >
-                          {t.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
           {/* Before-and-After Photo Activity (Section 6) */}
           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
@@ -657,42 +584,6 @@ export function SupervisorHome() {
                   </div>
                 );
               })}
-            </div>
-          </div>
-
-          {/* Low-Stock Material Alerts (Section 6) */}
-          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-sm font-bold text-slate-900 flex items-center space-x-2">
-                <Boxes className="w-4 h-4 text-amber-600" />
-                <span>Site Material Alerts</span>
-              </h3>
-              <button
-                onClick={() => navigate('/supervisor/material-inventory')}
-                className="text-xs text-civic-blue hover:underline font-semibold"
-              >
-                Inventory &rarr;
-              </button>
-            </div>
-
-            <div className="space-y-2.5">
-              {lowStockAlerts.length === 0 ? (
-                <p className="text-xs text-slate-400 py-3 text-center">No critical material shortages.</p>
-              ) : (
-                lowStockAlerts.map((m) => (
-                  <div key={m.id} className="p-2.5 rounded-xl border border-amber-200 bg-amber-50/40 text-xs flex items-center justify-between">
-                    <div>
-                      <p className="font-bold text-slate-800">{m.materialName}</p>
-                      <p className="text-[10px] text-slate-500">WO: #{m.workOrderId}</p>
-                    </div>
-                    <div className="text-right">
-                      <span className="font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md text-xs">
-                        {m.remainingQuantity} {m.unit}
-                      </span>
-                    </div>
-                  </div>
-                ))
-              )}
             </div>
           </div>
 
@@ -953,18 +844,13 @@ export function SupervisorHome() {
 
               <div>
                 <label className="font-bold text-slate-700 block mb-1">Material Name *</label>
-                <select
+                <SupervisorMaterialPicker
+                  id="quick-material-name"
+                  inventory={inventory}
                   value={matName}
-                  onChange={(e) => {
-                    setMatName(e.target.value);
-                    setMatUnit(inventory.find((item) => item.name === e.target.value)?.unit || 'Units');
-                  }}
-                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs font-semibold focus:ring-2 focus:ring-amber-500"
-                  required
-                >
-                  <option value="">Choose department inventory material</option>
-                  {inventory.map((item) => <option key={item.id} value={item.name}>{item.name} ({item.availableQuantity} {item.unit})</option>)}
-                </select>
+                  onChange={() => setMatName('')}
+                  onSelect={(item) => { setMatName(item.name); setMatUnit(item.unit || 'Units'); }}
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">

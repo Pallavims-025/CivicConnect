@@ -5,7 +5,6 @@ import { useCivic } from './context/CivicContext';
 
 import { SupervisorHome } from './pages/supervisor/SupervisorHome';
 import { AssignedWorkOrders } from './pages/supervisor/AssignedWorkOrders';
-import { WorkerAssignments } from './pages/supervisor/WorkerAssignments';
 import { RepairProgressTracking } from './pages/supervisor/RepairProgressTracking';
 import { PhotoEvidence } from './pages/supervisor/PhotoEvidence';
 import { MaterialInventory } from './pages/supervisor/MaterialInventory';
@@ -239,7 +238,7 @@ export default function App() {
         path="/supervisor"
         element={
           <ProtectedRoute roles={['SUPERVISOR']}>
-            <SupervisorLayout pageTitle="Field Operations & Supervision" />
+            <SupervisorLayout pageTitle="Supervisor Dashboard" />
           </ProtectedRoute>
         }
       >
@@ -247,7 +246,6 @@ export default function App() {
         <Route path="field-assignments" element={<SupervisorAssignments />} />
         <Route path="officer-notifications" element={<OfficerNotifications />} />
         <Route path="work-orders" element={<AssignedWorkOrders />} />
-        <Route path="worker-assignments" element={<WorkerAssignments />} />
         <Route path="repair-progress" element={<RepairProgressTracking />} />
         <Route path="photo-evidence" element={<PhotoEvidence />} />
         <Route path="material-inventory" element={<MaterialInventory />} />

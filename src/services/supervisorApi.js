@@ -6,6 +6,13 @@
 
 import { API_BASE_URL } from './api';
 
+export function resolveSupervisorAvatarUrl(avatarUrl) {
+  if (!avatarUrl) return '';
+  if (/^(?:https?:|data:)/i.test(avatarUrl)) return avatarUrl;
+  const apiRoot = API_BASE_URL.replace(/\/api\/?$/i, '').replace(/\/$/, '');
+  return `${apiRoot}${avatarUrl.startsWith('/') ? avatarUrl : `/${avatarUrl}`}`;
+}
+
 async function supervisorRequest(path, options = {}) {
   const token = localStorage.getItem('cc_auth_token');
   const response = await fetch(`${API_BASE_URL}/supervisor${path}`, {
@@ -25,6 +32,8 @@ export const fetchSupervisorDashboardData = () => supervisorRequest('/dashboard-
 export const updateSupervisorCrew = (workOrderId, workerNames) => supervisorRequest(`/work-orders/${encodeURIComponent(workOrderId)}/crew`, { method: 'PUT', body: JSON.stringify({ workerNames }) });
 export const addSupervisorSiteNote = (workOrderId, note) => supervisorRequest(`/work-orders/${encodeURIComponent(workOrderId)}/notes`, { method: 'POST', body: JSON.stringify({ note }) });
 export const updateSupervisorProfileRequest = (profile) => supervisorRequest('/profile', { method: 'PUT', body: JSON.stringify(profile) });
+export const uploadSupervisorProfilePhotoRequest = (imageData) => supervisorRequest('/profile/photo', { method: 'POST', body: JSON.stringify({ imageData }) });
+export const removeSupervisorProfilePhotoRequest = () => supervisorRequest('/profile/photo', { method: 'DELETE' });
 export const updateSupervisorWorkerTask = (taskId, payload) => supervisorRequest(`/worker-tasks/${encodeURIComponent(taskId)}`, { method: 'PUT', body: JSON.stringify(payload) });
 export const deleteSupervisorWorkerTask = (taskId) => supervisorRequest(`/worker-tasks/${encodeURIComponent(taskId)}`, { method: 'DELETE' });
 
@@ -97,6 +106,8 @@ export default {
   updateSupervisorCrew,
   addSupervisorSiteNote,
   updateSupervisorProfileRequest,
+  uploadSupervisorProfilePhotoRequest,
+  removeSupervisorProfilePhotoRequest,
   updateSupervisorWorkerTask,
   deleteSupervisorWorkerTask,
   fetchSupervisorProfile,

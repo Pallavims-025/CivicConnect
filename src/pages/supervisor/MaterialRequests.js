@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useCivic } from '../../context/CivicContext';
 import { PriorityBadge } from '../../components/common/StatusBadge';
+import { SupervisorMaterialPicker } from './SupervisorMaterialPicker';
 
 export function MaterialRequests() {
   const {
@@ -80,7 +81,7 @@ export function MaterialRequests() {
   // Submit Request
   const handleSubmitRequest = async (e) => {
     e.preventDefault();
-    if (!reqWO || !reqMatName.trim() || !reqQty) {
+    if (!reqWO || !inventory.some((item) => item.name === reqMatName) || !reqQty) {
       alert('Please fill out all required requisition fields.');
       return;
     }
@@ -91,7 +92,7 @@ export function MaterialRequests() {
       await submitSupervisorMaterialRequest({
       workOrderId: reqWO,
       complaintId: targetWO?.complaintId,
-      materialName: reqMatName.trim(),
+      materialName: reqMatName,
       requestedQty: reqQty,
       unit: reqUnit,
       priority: isUrgentShortage ? 'CRITICAL' : reqPriority,
@@ -366,18 +367,13 @@ export function MaterialRequests() {
 
               <div>
                 <label className="font-bold text-slate-700 block mb-1">Material Name *</label>
-                <select
+                <SupervisorMaterialPicker
+                  id="requisition-material-name"
+                  inventory={inventory}
                   value={reqMatName}
-                  onChange={(e) => {
-                    setReqMatName(e.target.value);
-                    setReqUnit(inventory.find((item) => item.name === e.target.value)?.unit || 'Units');
-                  }}
-                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs font-semibold focus:ring-2 focus:ring-amber-500"
-                  required
-                >
-                  <option value="">Choose department inventory material</option>
-                  {inventory.map((item) => <option key={item.id} value={item.name}>{item.name} ({item.availableQuantity} {item.unit})</option>)}
-                </select>
+                  onChange={() => setReqMatName('')}
+                  onSelect={(item) => { setReqMatName(item.name); setReqUnit(item.unit || 'Units'); }}
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">

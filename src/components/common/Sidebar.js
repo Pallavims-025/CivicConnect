@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { useCivic } from '../../context/CivicContext';
 import { useAuth } from '../../context/AuthContext';
+import { resolveSupervisorAvatarUrl } from '../../services/supervisorApi';
 
 export function Sidebar({ role = 'citizen', isOpen, onClose }) {
   const navigate = useNavigate();
@@ -113,7 +114,6 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
   const supervisorNav = [
     { label: 'Supervisor Dashboard', path: '/supervisor', icon: LayoutDashboard },
     { label: 'Assigned Work Orders', path: '/supervisor/work-orders', icon: Briefcase, count: supervisorActiveWOCount, countColor: 'bg-blue-500' },
-    { label: 'Worker Assignments', path: '/supervisor/worker-assignments', icon: Users },
     { label: 'Repair Progress Tracking', path: '/supervisor/repair-progress', icon: TrendingUp },
     { label: 'Photo Evidence', path: '/supervisor/photo-evidence', icon: Camera },
     { label: 'Material Inventory', path: '/supervisor/material-inventory', icon: Boxes },
@@ -194,16 +194,25 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
                 : role === 'officer'
                 ? 'Operations Staff'
                 : role === 'supervisor'
-                ? 'Field Supervision'
+                ? ''
                 : 'System Administration'}
             </span>
           </span>
           {role === 'supervisor' && (
-            <span className="ml-2 max-w-28 truncate text-[11px] font-semibold text-white" title={supervisorProfile?.name || user?.name || ''}>
-              {supervisorProfile?.name || user?.name || 'Field Supervisor'}
-            </span>
+            <div className="ml-2 flex min-w-0 items-center gap-2" title={supervisorProfile?.name || user?.name || ''}>
+              {resolveSupervisorAvatarUrl(supervisorProfile?.avatarUrl) ? (
+                <img src={resolveSupervisorAvatarUrl(supervisorProfile.avatarUrl)} alt="" className="h-7 w-7 shrink-0 rounded-full border border-white/20 object-cover" />
+              ) : (
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white">
+                  {(supervisorProfile?.name || user?.name || '?').trim().split(/\s+/).map((word) => word[0]).slice(0, 2).join('').toUpperCase()}
+                </span>
+              )}
+              <span className="max-w-24 truncate text-[11px] font-semibold text-white">
+                {supervisorProfile?.name || user?.name || 'Field Supervisor'}
+              </span>
+            </div>
           )}
-          {role !== 'citizen' && role !== 'officer' && <button
+          {role === 'admin' && <button
             onClick={handleRoleToggle}
             className="text-[11px] text-blue-300 hover:text-white flex items-center space-x-1 font-semibold hover:underline cursor-pointer"
             title="Switch view"

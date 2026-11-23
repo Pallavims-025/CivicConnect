@@ -5,6 +5,8 @@ import {
   updateSupervisorCrew,
   addSupervisorSiteNote,
   updateSupervisorProfileRequest,
+  uploadSupervisorProfilePhotoRequest,
+  removeSupervisorProfilePhotoRequest,
   apiUpdateProgress,
   apiReportDelay,
   apiRecordMaterialTxn,
@@ -105,7 +107,7 @@ export function CivicProvider({ children }) {
         name: profile.name || authenticatedUser?.name || '',
         email: profile.email || authenticatedUser?.email || '',
         phone: profile.phone || authenticatedUser?.phone || '',
-        avatarUrl: profile.avatarUrl || authenticatedUser?.avatarUrl || '',
+        avatarUrl: profile.avatarUrl ?? authenticatedUser?.avatarUrl ?? '',
         title: profile.title || '',
         employeeId: '',
         department: profile.department?.name || '',
@@ -785,6 +787,18 @@ export function CivicProvider({ children }) {
   const updateSupervisorProfile = async (updated) => {
     const saved = await updateSupervisorProfileRequest(updated);
     setSupervisorProfile({ ...supervisorProfile, ...saved, department: saved.department?.name || '' });
+    return saved;
+  };
+
+  const updateSupervisorAvatar = async (imageData) => {
+    const saved = await uploadSupervisorProfilePhotoRequest(imageData);
+    setSupervisorProfile((previous) => ({ ...previous, ...saved, department: saved.department?.name || previous.department || '' }));
+    return saved;
+  };
+
+  const removeSupervisorAvatar = async () => {
+    const saved = await removeSupervisorProfilePhotoRequest();
+    setSupervisorProfile((previous) => ({ ...previous, ...saved, department: saved.department?.name || previous.department || '' }));
     return saved;
   };
 
@@ -1549,6 +1563,8 @@ export function CivicProvider({ children }) {
         updateOfficerProfile,
         // Supervisor actions (Member 3)
         updateSupervisorProfile,
+        updateSupervisorAvatar,
+        removeSupervisorAvatar,
         addWorkerTask,
         updateWorkerTask,
         deleteWorkerTask,

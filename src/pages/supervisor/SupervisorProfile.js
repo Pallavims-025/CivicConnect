@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   User,
@@ -14,16 +14,21 @@ import {
   CheckCircle2,
   HardHat,
   Briefcase,
+  Camera,
+  Trash2,
 } from 'lucide-react';
 import { useCivic } from '../../context/CivicContext';
 import { useAuth } from '../../context/AuthContext';
+import { resolveSupervisorAvatarUrl } from '../../services/supervisorApi';
 
 export function SupervisorProfile() {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { logout, refreshUser } = useAuth();
   const {
     supervisorProfile,
     updateSupervisorProfile,
+    updateSupervisorAvatar,
+    removeSupervisorAvatar,
     workOrders,
     workerTasks,
   } = useCivic();
@@ -41,6 +46,9 @@ export function SupervisorProfile() {
 
   const [isEditing, setIsEditing] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [photoError, setPhotoError] = useState('');
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const photoInputRef = useRef(null);
 
   // Statistics
   const activeWOCount = workOrders.filter((workOrder) => workOrder.status !== 'COMPLETED').length;
@@ -82,6 +90,49 @@ export function SupervisorProfile() {
     logout().finally(() => navigate('/login', { replace: true }));
   };
 
+  const handlePhotoUpload = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setPhotoError('');
+    if (!['image/jpeg', 'image/png'].includes(file.type)) {
+      setPhotoError('Choose a JPG, JPEG, or PNG image.');
+      return;
+    }
+    if (!file.size || file.size > 2 * 1024 * 1024) {
+      setPhotoError('Choose an image that is 2 MB or smaller.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onerror = () => setPhotoError('The selected image could not be read.');
+    reader.onload = async () => {
+      setPhotoBusy(true);
+      try {
+        await updateSupervisorAvatar(reader.result);
+        await refreshUser();
+      } catch (error) {
+        setPhotoError(error.message || 'Photo could not be uploaded.');
+      } finally {
+        setPhotoBusy(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemovePhoto = async () => {
+    setPhotoError('');
+    setPhotoBusy(true);
+    try {
+      await removeSupervisorAvatar();
+      await refreshUser();
+    } catch (error) {
+      setPhotoError(error.message || 'Photo could not be removed.');
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-6 pb-12 font-sans max-w-4xl mx-auto">
       {/* Header */}
@@ -101,7 +152,7 @@ export function SupervisorProfile() {
           className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200 transition-colors self-start sm:self-auto"
         >
           <LogOut className="w-4 h-4" />
-          <span>Sign Out / Switch Role</span>
+          <span>Sign Out</span>
         </button>
       </div>
 
@@ -115,15 +166,29 @@ export function SupervisorProfile() {
 
       {/* Profile Summary Card */}
       <div className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200 shadow-xs flex flex-col md:flex-row items-center md:items-start gap-6">
-        <div className="relative">
-          <img
-            src={supervisorProfile.avatarUrl}
-            alt={supervisorProfile.name}
-            className="w-24 h-24 rounded-3xl object-cover ring-4 ring-blue-50 shadow-md"
-          />
-          <div className="absolute -bottom-2 -right-2 p-1.5 bg-civic-blue text-white rounded-xl shadow-md">
-            <HardHat className="w-4 h-4" />
+        <div className="flex flex-col items-center gap-3">
+          <div className="relative">
+            {supervisorProfile.avatarUrl ? (
+              <img src={resolveSupervisorAvatarUrl(supervisorProfile.avatarUrl)} alt={`${supervisorProfile.name} profile`} className="h-24 w-24 rounded-3xl object-cover ring-4 ring-blue-50 shadow-md" />
+            ) : (
+              <div aria-label="Default profile avatar" className="flex h-24 w-24 items-center justify-center rounded-3xl bg-gradient-to-br from-civic-blue to-blue-500 text-2xl font-extrabold text-white ring-4 ring-blue-50 shadow-md">
+                {(supervisorProfile.name || '?').trim().split(/\s+/).map((word) => word[0]).slice(0, 2).join('').toUpperCase()}
+              </div>
+            )}
+            <div className="absolute -bottom-2 -right-2 p-1.5 bg-civic-blue text-white rounded-xl shadow-md">
+              <HardHat className="w-4 h-4" />
+            </div>
           </div>
+          <input ref={photoInputRef} type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" onChange={handlePhotoUpload} className="hidden" />
+          <div className="flex items-center gap-3">
+            <button type="button" disabled={photoBusy} onClick={() => photoInputRef.current?.click()} className="inline-flex items-center gap-1.5 text-xs font-semibold text-civic-blue hover:text-blue-800 disabled:opacity-50">
+              <Camera className="h-3.5 w-3.5" />{photoBusy ? 'Saving…' : supervisorProfile.avatarUrl ? 'Change photo' : 'Add photo'}
+            </button>
+            {supervisorProfile.avatarUrl && <button type="button" disabled={photoBusy} onClick={handleRemovePhoto} className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-600 hover:text-rose-800 disabled:opacity-50">
+              <Trash2 className="h-3.5 w-3.5" />Remove
+            </button>}
+          </div>
+          <span className="text-[10px] text-slate-400">JPG or PNG · up to 2 MB</span>
         </div>
 
         <div className="space-y-2 text-center md:text-left flex-1">
@@ -166,6 +231,7 @@ export function SupervisorProfile() {
           </div>
         </div>
       </div>
+      {photoError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-700">{photoError}</p>}
 
       {/* Profile Form (Section 15) */}
       <div className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200 shadow-xs space-y-6">

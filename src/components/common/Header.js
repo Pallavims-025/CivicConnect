@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useCivic } from '../../context/CivicContext';
 import { useAuth } from '../../context/AuthContext';
+import { resolveSupervisorAvatarUrl } from '../../services/supervisorApi';
 
 export function Header({ title, onToggleMobileSidebar }) {
   const {
@@ -76,7 +77,7 @@ export function Header({ title, onToggleMobileSidebar }) {
   } else if (currentRole === 'supervisor') {
     activeUser = supervisorProfile;
     roleDisplayName = 'Supervisor';
-    portalSubtitle = 'Field Operations & Supervision';
+    portalSubtitle = '';
   } else if (currentRole === 'admin') {
     activeUser = {
       name: user?.name || 'Super Admin',
@@ -100,11 +101,17 @@ export function Header({ title, onToggleMobileSidebar }) {
         ...activeUser,
         name: user.name || activeUser?.name,
         email: user.email || activeUser?.email,
-        avatarUrl: user.avatarUrl || activeUser?.avatarUrl,
+        avatarUrl: currentRole === 'supervisor'
+          ? activeUser?.avatarUrl || user.avatarUrl
+          : user.avatarUrl || activeUser?.avatarUrl,
         department: user.department?.name || user.department || activeUser?.department,
       };
     }
   }
+
+  const profileAvatarUrl = currentRole === 'supervisor'
+    ? resolveSupervisorAvatarUrl(activeUser?.avatarUrl)
+    : activeUser?.avatarUrl;
 
   return (
     <header className="h-16 bg-white border-b border-slate-200 px-4 md:px-8 flex items-center justify-between sticky top-0 z-30 shadow-xs">
@@ -121,7 +128,7 @@ export function Header({ title, onToggleMobileSidebar }) {
           <h1 className={`text-lg md:text-xl font-bold text-civic-text leading-tight ${currentRole === 'citizen' ? 'sr-only' : ''}`}>
             {currentRole === 'officer' && title === 'Dashboard' ? '' : title || (currentRole === 'officer' ? '' : 'Dashboard')}
           </h1>
-          {currentRole !== 'officer' && <div className="flex items-center space-x-2 text-xs text-civic-muted">
+          {currentRole !== 'officer' && currentRole !== 'supervisor' && <div className="flex items-center space-x-2 text-xs text-civic-muted">
             <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-50 text-civic-blue font-medium text-[11px] border border-blue-200">
               CivicConnect Platform
             </span>
@@ -298,9 +305,9 @@ export function Header({ title, onToggleMobileSidebar }) {
         </div>
 
         {/* USER PROFILE SNIPPET */}
-        <button onClick={() => ['citizen','officer'].includes(currentRole) && navigate(`/${currentRole}/profile`)} aria-label="Open profile" className="flex items-center space-x-2 pl-2 border-l border-slate-200">
-          {activeUser?.avatarUrl ? <img
-            src={activeUser.avatarUrl}
+        <button onClick={() => ['citizen', 'officer', 'supervisor'].includes(currentRole) && navigate(`/${currentRole}/profile`)} aria-label="Open profile" className={`flex items-center space-x-2 pl-2 border-l border-slate-200 ${['citizen', 'officer', 'supervisor'].includes(currentRole) ? 'cursor-pointer' : 'cursor-default'}`}>
+          {profileAvatarUrl ? <img
+            src={profileAvatarUrl}
             alt={activeUser?.name || 'User'}
             className="w-8 h-8 rounded-full object-cover ring-2 ring-slate-200"
           /> : <span className="w-8 h-8 rounded-full bg-civic-blue text-white flex items-center justify-center text-xs font-bold">{(activeUser?.name || '?').trim().split(/\s+/).map((word) => word[0]).slice(0,2).join('').toUpperCase()}</span>}
