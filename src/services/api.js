@@ -36,6 +36,10 @@ async function request(path, options = {}) {
 
 export const getComplaintCategories = () => request('/complaints/categories');
 export const getMyComplaints = () => request('/complaints/mine');
+export const retryComplaintPhotoVerification = (id, photos) => request(`/complaints/${encodeURIComponent(id)}/photos/retry`, {
+  method: 'POST',
+  body: JSON.stringify({ photos }),
+});
 export const updateCitizenProfileRequest = (profile) => request('/auth/citizen-profile', { method: 'PATCH', body: JSON.stringify(profile) });
 export const updateOfficerProfileRequest = (profile) => request('/auth/officer-profile', { method: 'PATCH', body: JSON.stringify(profile) });
 export const createComplaint = (complaint) => request('/complaints', {
@@ -45,6 +49,10 @@ export const createComplaint = (complaint) => request('/complaints', {
 export const getOfficerMapComplaints = () => request('/complaints/officer-map');
 export const getOfficerComplaints = () => request('/complaints/officer');
 export const getOfficerComplaint = (id) => request(`/complaints/officer/${encodeURIComponent(id)}`);
+export const reviewComplaintPhotoLocation = (complaintId, photoId, decision, notes = '') => request(
+  `/complaints/officer/${encodeURIComponent(complaintId)}/photos/${encodeURIComponent(photoId)}/location-review`,
+  { method: 'PATCH', body: JSON.stringify({ decision, notes }) },
+);
 export const updateOfficerComplaintStatus = (id, update) => request(`/complaints/${encodeURIComponent(id)}/status`, {
   method: 'PATCH',
   body: JSON.stringify(update),

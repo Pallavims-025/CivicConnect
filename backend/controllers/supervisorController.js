@@ -5,6 +5,7 @@ import { mkdir, writeFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { notifyUser } from '../lib/notificationService.js';
+import { VERIFIED_WORK_ORDER_WHERE } from '../lib/verifiedComplaint.js';
 
 const supervisorAvatarDirectory = new URL('../uploads/supervisor-avatars/', import.meta.url);
 const supervisorAvatarPath = fileURLToPath(supervisorAvatarDirectory);
@@ -19,7 +20,7 @@ async function removeSupervisorAvatar(avatarUrl) {
 
 const workOrderInclude = {
   department: true,
-  complaint: { include: { category: true, user: { select: { id: true, name: true } }, photos: true } },
+  complaint: { include: { category: true, user: { select: { id: true, name: true } }, photos: { where: { locationVerificationStatus: 'VERIFIED' } } } },
   photos: { orderBy: { createdAt: 'asc' } },
   statusHistory: { orderBy: { createdAt: 'asc' } },
   materialRequests: { include: { items: { include: { inventoryItem: true } } } },
@@ -27,7 +28,7 @@ const workOrderInclude = {
 };
 
 async function ownedWorkOrder(id, supervisorId) {
-  return prisma.workOrder.findFirst({ where: { id, supervisorId }, include: workOrderInclude });
+  return prisma.workOrder.findFirst({ where: { id, supervisorId, ...VERIFIED_WORK_ORDER_WHERE }, include: workOrderInclude });
 }
 
 async function notifyOfficer(tx, order, title, message, eventKey = `${title}:${order.id}:${Date.now()}`) {
@@ -160,7 +161,7 @@ export async function addWorkOrderNote(req, res, next) {
 
 export async function getSupervisorWorkOrders(req, res, next) {
   try {
-    const data = await prisma.workOrder.findMany({ where: { supervisorId: req.user.id }, include: workOrderInclude, orderBy: [{ deadline: 'asc' }, { createdAt: 'desc' }] });
+    const data = await prisma.workOrder.findMany({ where: { supervisorId: req.user.id, ...VERIFIED_WORK_ORDER_WHERE }, include: workOrderInclude, orderBy: [{ deadline: 'asc' }, { createdAt: 'desc' }] });
     res.json({ success: true, data });
   } catch (error) { next(error); }
 }
@@ -168,7 +169,7 @@ export async function getSupervisorWorkOrders(req, res, next) {
 export async function getSupervisorDashboardData(req, res, next) {
   try {
     const profile = await prisma.user.findUnique({ where: { id: req.user.id }, select: { id: true, name: true, email: true, phone: true, avatarUrl: true, title: true, wardCoverage: true, department: { select: { id: true, name: true } } } });
-    const orders = await prisma.workOrder.findMany({ where: { supervisorId: req.user.id }, include: workOrderInclude, orderBy: [{ deadline: 'asc' }, { createdAt: 'desc' }] });
+    const orders = await prisma.workOrder.findMany({ where: { supervisorId: req.user.id, ...VERIFIED_WORK_ORDER_WHERE }, include: workOrderInclude, orderBy: [{ deadline: 'asc' }, { createdAt: 'desc' }] });
     const inventory = await prisma.inventoryItem.findMany({
       where: { OR: [{ departmentId: req.user.departmentId || -1 }, { departmentId: null }] },
       orderBy: { name: 'asc' },
@@ -178,7 +179,7 @@ export async function getSupervisorDashboardData(req, res, next) {
       prisma.materialRequest.findMany({ where: { requestedByUserId: req.user.id, workOrderId: { in: orderIds } }, include: { items: { include: { inventoryItem: true } }, workOrder: { select: { id: true, workOrderCode: true, complaintId: true, department: { select: { name: true } } } } }, orderBy: { requestDate: 'desc' } }),
       orderIds.length ? prisma.inventoryTransaction.findMany({ where: { workOrderId: { in: orderIds } }, include: { inventoryItem: true }, orderBy: { createdAt: 'desc' } }) : [],
       prisma.notification.findMany({ where: { userId: req.user.id }, orderBy: { createdAt: 'desc' }, take: 100 }),
-      prisma.$queryRaw`SELECT task.id, task.work_order_id AS workOrderId, task.supervisor_id AS supervisorId, task.worker_name AS workerName, task.worker_contact AS workerContact, task.task_description AS taskDescription, task.deadline, task.progress, task.status, task.delay_reason AS delayReason, task.created_at AS createdAt, task.updated_at AS updatedAt, order_record.work_order_code AS workOrderCode FROM supervisor_worker_tasks task JOIN work_orders order_record ON order_record.id = task.work_order_id WHERE task.supervisor_id = ${req.user.id} ORDER BY task.created_at DESC`,
+      prisma.$queryRaw`SELECT task.id, task.work_order_id AS workOrderId, task.supervisor_id AS supervisorId, task.worker_name AS workerName, task.worker_contact AS workerContact, task.task_description AS taskDescription, task.deadline, task.progress, task.status, task.delay_reason AS delayReason, task.created_at AS createdAt, task.updated_at AS updatedAt, order_record.work_order_code AS workOrderCode FROM supervisor_worker_tasks task JOIN work_orders order_record ON order_record.id = task.work_order_id WHERE task.supervisor_id = ${req.user.id} AND EXISTS (SELECT 1 FROM complaint_photos verified_photo WHERE verified_photo.complaint_id = order_record.complaint_id AND verified_photo.location_verification_status = 'VERIFIED') ORDER BY task.created_at DESC`,
     ]);
     res.json({ success: true, data: { profile, orders, inventory, requests, transactions, notifications, workerTasks } });
   } catch (error) { next(error); }
