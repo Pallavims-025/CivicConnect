@@ -1,5 +1,6 @@
 export const VERIFIED_COMPLAINT_WHERE = {
-  photos: { some: { locationVerificationStatus: 'VERIFIED' } },
+  status: { not: 'REJECTED' },
+  photos: { some: { photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' } },
 };
 
 export const VERIFIED_WORK_ORDER_WHERE = {
@@ -9,7 +10,8 @@ export const VERIFIED_WORK_ORDER_WHERE = {
 export function hasVerifiedComplaintPhoto(complaint) {
   const photos = Array.isArray(complaint?.photos) ? complaint.photos : complaint?.photoLocationEvidence;
   return Array.isArray(photos)
-    && photos.some((photo) => photo?.locationVerificationStatus === 'VERIFIED');
+    && complaint?.status !== 'REJECTED'
+    && photos.some((photo) => photo?.photoType !== 'RESOLUTION_EVIDENCE' && photo?.locationVerificationStatus === 'VERIFIED');
 }
 
 export function citizenOwnsComplaint(complaint, userId) {

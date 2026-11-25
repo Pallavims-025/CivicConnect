@@ -122,6 +122,17 @@ export async function fetchAdminStats() {
   }
 }
 
+export async function fetchAdminDashboard(range = '30_DAYS') {
+  try {
+    const res = await fetch(`${API_BASE_URL}/admin/dashboard?range=${encodeURIComponent(range)}`, { headers: authHeaders() });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: json.error?.message || json.errors?.general || 'Could not load admin dashboard data.' };
+    return { ok: true, data: json.data };
+  } catch (err) {
+    return { ok: false, error: err.message || 'Could not reach the admin dashboard API.' };
+  }
+}
+
 /**
  * Fetch master user list
  */
@@ -232,6 +243,7 @@ export default {
   API_BASE_URL,
   checkBackendHealth,
   fetchAdminStats,
+  fetchAdminDashboard,
   fetchAdminUsers,
   createAdminUser,
   updateAdminUser,

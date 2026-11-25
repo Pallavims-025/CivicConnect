@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getOfficerComplaints } from '../services/api';
+import { isMunicipalComplaintEligible } from '../lib/municipalComplaintEligibility';
 
 export function useOfficerComplaints() {
   const [complaints, setComplaints] = useState([]);
@@ -14,6 +15,7 @@ export function useOfficerComplaints() {
       const result = await getOfficerComplaints();
       const unique = new Map();
       for (const complaint of result?.complaints || []) {
+        if (!isMunicipalComplaintEligible(complaint)) continue;
         const photos = [...new Set((complaint.photos || []).map((photo) => typeof photo === 'string' ? photo.trim() : '').filter(Boolean))];
         unique.set(complaint.databaseId || complaint.id, { ...complaint, photos });
       }

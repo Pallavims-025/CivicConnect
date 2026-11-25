@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1840" height="1540" viewBox="0 0 1840 1540" role="img" aria-labelledby="title desc">
+  <title id="title">CivicConnect MySQL entity relationship diagram</title>
+  <desc id="desc">All eighteen Prisma models with primary keys, foreign keys, and relationship cardinalities. See DATABASE.md for the complete relationship list and Mermaid source.</desc>
+  <defs><style>
+    .bg{fill:#f5f8fc}.title{font:700 30px Arial,sans-serif;fill:#102a43}.subtitle{font:15px Arial,sans-serif;fill:#486581}
+    .box{fill:#fff;stroke:#829ab1;stroke-width:1.4;rx:9}.head{fill:#d9eaf7}.name{font:700 15px Arial,sans-serif;fill:#102a43}.key{font:12px 'Courier New',monospace;fill:#334e68}.rel{stroke:#486581;stroke-width:1.4;fill:none;opacity:.55}.card{font:12px Arial,sans-serif;fill:#243b53}.small{font:11px Arial,sans-serif;fill:#486581}.fk{fill:#7c3aed}
+  </style></defs>
+  <rect class="bg" width="1840" height="1540"/>
+  <text class="title" x="40" y="48">CivicConnect · Database ER diagram</text>
+  <text class="subtitle" x="40" y="76">MySQL · 18 Prisma models · PK = primary key · FK = foreign key · connectors/cardinalities summarized at right</text>
+  <!-- Entity cards -->
+  <g transform="translate(35 110)"><rect class="box" width="350" height="100"/><path class="head" d="M9 0h332a9 9 0 0 1 9 9v25H0V9a9 9 0 0 1 9-9"/><text class="name" x="14" y="23">DEPARTMENT</text><text class="key" x="14" y="54">PK id INT</text><text class="key" x="14" y="75">UNIQUE code, name</text></g>
+  <g transform="translate(405 110)"><rect class="box" width="350" height="100"/><path class="head" d="M9 0h332a9 9 0 0 1 9 9v25H0V9a9 9 0 0 1 9-9"/><text class="name" x="14" y="23">USER</text><text class="key" x="14" y="54">PK id VARCHAR(36)</text><text class="key" x="14" y="75">FK department_id INT?</text></g>
+  <g transform="translate(775 110)"><rect class="box" width="350" height="100"/><path class="head" d="M9 0h332a9 9 0 0 1 9 9v25H0V9a9 9 0 0 1 9-9"/><text class="name" x="14" y="23">CATEGORY</text><text class="key" x="14" y="54">PK id INT</text><text class="key" x="14" y="75">FK department_id INT?</text></g>
+  <g transform="translate(35 230)"><rect class="box" width="350" height="120"/><path class="head" d="M9 0h332a9 9 0 0 1 9 9v25H0V9a9 9 0 0 1 9-9"/><text class="name" x="14" y="23">COMPLAINT</text><text class="key" x="14" y="54">PK id VARCHAR(36)</text><text class="key" x="14" y="75">FK user_id, category_id, department_id?</text><text class="key" x="14" y="96">FK assigned_officer_id?, duplicate_of_id?</text></g>
+  <g transform="translate(405 230)"><rect class="box" width="350" height="120"/><path class="head" d="M9 0h332a9 9 0 0 1 9 9v25H0V9a9 9 0 0 1 9-9"/><text class="name" x="14" y="23">COMPLAINT_PHOTO</text><text class="key" x="14" y="54">PK id VARCHAR(36)</text><text class="key" x="14" y="75">FK complaint_id, uploaded_by_id?</text><text class="key" x="14" y="96">FK location_reviewed_by_user_id?</text></g>
+  <g transform="translate(775 230)"><rect class="box" width="350" height="120"/><path class="head" d="M9 0h332a9 9 0 0 1 9 9v25H0V9a9 9 0 0 1 9-9"/><text class="name" x="14" y="23">WORK_ORDER</text><text class="key" x="14" y="54">PK id VARCHAR(36)</text><text class="key" x="14" y="75">FK complaint_id, department_id</text><text class="key" x="14" y="96">FK supervisor_id?, assigned_by_officer_id?</text></g>
+  <g transform="translate(35 370)"><rect class="box" width="350" height="100"/><path class="head" d="M9 0h332a9 9 0 0 1 9 9v25H0V9a9 9 0 0 1 9-9"/><text class="name" x="14" y="23">WORK_ORDER_STATUS_HISTORY</text><text class="key" x="14" y="54">PK id VARCHAR(36)</text><text class="key" x="14" y="75">FK work_order_id, changed_by_user_id?</text></g>
+  <g transform="translate(405 370)"><rect class="box" width="350" height="100"/><path class="head" d="M9 0h332a9 9 0 0 1 9 9v25H0V9a9 9 0 0 1 9-9"/><text class="name" x="14" y="23">WORK_ORDER_PHOTO</text><text class="key" x="14" y="54">PK id VARCHAR(36)</text><text class="key" x="14" y="75">FK work_order_id, uploaded_by_user_id?</text></g>
+  <g transform="translate(775 370)"><rect class="box" width="350" height="100"/><path class="head" d="M9 0h332a9 9 0 0 1 9 9v25H0V9a9 9 0 0 1 9-9"/><text class="name" x="14" y="23">SUPERVISOR_WORKER_TASK</text><text class="key" x="14" y="54">PK id VARCHAR(36)</text><text class="key" x="14" y="75">FK work_order_id, supervisor_id</text></g>
+  <g transform="translate(35 490)"><rect class="box" width="350" height="120"/><path class="head" d="M9 0h332a9 9 0 0 1 9 9v25H0V9a9 9 0 0 1 9-9"/><text class="name" x="14" y="23">DUPLICATE_COMPLAINT_MATCH</text><text class="key" x="14" y="54">PK id VARCHAR(36)</text><text class="key" x="14" y="75">FK complaint_id, matched_complaint_id</text><text class="key" x="14" y="96">FK reviewed_by_user_id?</text></g>
+  <g transform="translate(405 490)"><rect class="box" width="350" height="100"/><path class="head" d="M9 0h332a9 9 0 0 1 9 9v25H0V9a9 9 0 0 1 9-9"/><text class="name" x="14" y="23">INVENTORY_ITEM</text><text class="key" x="14" y="54">PK id VARCHAR(36)</text><text class="key" x="14" y="75">FK department_id INT?</text></g>
+  <g transform="translate(775 490)"><rect class="box" width="350" height="120"/><path class="head" d="M9 0h332a9 9 0 0 1 9 9v25H0V9a9 9 0 0 1 9-9"/><text class="name" x="14" y="23">MATERIAL_REQUEST</text><text class="key" x="14" y="54">PK id VARCHAR(36)</text><text class="key" x="14" y="75">FK work_order_id</text><text class="key" x="14" y="96">FK requested_by_user_id?, decided_by_user_id?</text></g>
+  <g transform="translate(35 630)"><rect class="box" width="350" height="100"/><path class="head" d="M9 0h332a9 9 0 0 1 9 9v25H0V9a9 9 0 0 1 9-9"/><text class="name" x="14" y="23">MATERIAL_REQUEST_ITEM</text><text class="key" x="14" y="54">PK id VARCHAR(36)</text><text class="key" x="14" y="75">FK material_request_id, inventory_item_id</text></g>
+  <g transform="translate(405 630)"><rect class="box" width="350" height="120"/><path class="head" d="M9 0h332a9 9 0 0 1 9 9v25H0V9a9 9 0 0 1 9-9"/><text class="name" x="14" y="23">INVENTORY_TRANSACTION</text><text class="key" x="14" y="54">PK id VARCHAR(36)</text><text class="key" x="14" y="75">FK inventory_item_id; material_request_id?</text><text class="key" x="14" y="96">FK work_order_id?, performed_by_user_id?</text></g>
+  <g transform="translate(775 630)"><rect class="box" width="350" height="120"/><path class="head" d="M9 0h332a9 9 0 0 1 9 9v25H0V9a9 9 0 0 1 9-9"/><text class="name" x="14" y="23">REPAIR_VERIFICATION</text><text class="key" x="14" y="54">PK id VARCHAR(36)</text><text class="key" x="14" y="75">FK complaint_id, work_order_id</text><text class="key" x="14" y="96">FK submitted_by_supervisor_id?, verified_by_officer_id?</text></g>
+  <g transform="translate(35 770)"><rect class="box" width="350" height="100"/><path class="head" d="M9 0h332a9 9 0 0 1 9 9v25H0V9a9 9 0 0 1 9-9"/><text class="name" x="14" y="23">COMPLAINT_STATUS_HISTORY</text><text class="key" x="14" y="54">PK id VARCHAR(36)</text><text class="key" x="14" y="75">FK complaint_id, performed_by_user_id?</text></g>
+  <g transform="translate(405 770)"><rect class="box" width="350" height="100"/><path class="head" d="M9 0h332a9 9 0 0 1 9 9v25H0V9a9 9 0 0 1 9-9"/><text class="name" x="14" y="23">NOTIFICATION</text><text class="key" x="14" y="54">PK id VARCHAR(36)</text><text class="key" x="14" y="75">FK user_id?, complaint_id?, work_order_id?</text></g>
+  <g transform="translate(775 770)"><rect class="box" width="350" height="100"/><path class="head" d="M9 0h332a9 9 0 0 1 9 9v25H0V9a9 9 0 0 1 9-9"/><text class="name" x="14" y="23">AUDIT_LOG</text><text class="key" x="14" y="54">PK id VARCHAR(36)</text><text class="key" x="14" y="75">FK user_id?</text></g>
+  <g transform="translate(35 890)"><rect class="box" width="350" height="100"/><path class="head" d="M9 0h332a9 9 0 0 1 9 9v25H0V9a9 9 0 0 1 9-9"/><text class="name" x="14" y="23">FEEDBACK</text><text class="key" x="14" y="54">PK id VARCHAR(36)</text><text class="key" x="14" y="75">FK user_id, complaint_id · unique pair</text></g>
+  <!-- Relationship key: one relationship per FK; crow-foot notation is explained here for compact readability. -->
+  <g transform="translate(1170 110)">
+    <text class="name" x="0" y="0">RELATIONSHIPS · crow’s foot (1 to many)</text>
+    <text class="small" x="0" y="28">Each line means parent 1 → child 0..many, unless marked optional:</text>
+    <text class="card" x="0" y="55">Department → Category, User, Complaint, WorkOrder, InventoryItem</text>
+    <text class="card" x="0" y="78">Category → Complaint · User (citizen) → Complaint</text>
+    <text class="card" x="0" y="101">User (assigned officer) → Complaint · Complaint (parent) → Complaint</text>
+    <text class="card" x="0" y="124">Complaint → ComplaintPhoto, WorkOrder, StatusHistory, Feedback</text>
+    <text class="card" x="0" y="147">Complaint → RepairVerification, Notification, DuplicateMatch (source/target)</text>
+    <text class="card" x="0" y="170">User → ComplaintPhoto (uploader/reviewer), WorkOrder (supervisor/assigner)</text>
+    <text class="card" x="0" y="193">User → WorkOrderStatusHistory, WorkOrderPhoto, WorkerTask</text>
+    <text class="card" x="0" y="216">User → DuplicateMatch, MaterialRequest (requester/decider), InventoryTransaction</text>
+    <text class="card" x="0" y="239">User → RepairVerification (submitter/approver), ComplaintStatusHistory,</text>
+    <text class="card" x="16" y="259">Notification, AuditLog, Feedback</text>
+    <text class="card" x="0" y="286">WorkOrder → StatusHistory, Photo, WorkerTask, MaterialRequest,</text>
+    <text class="card" x="16" y="306">RepairVerification, InventoryTransaction, Notification</text>
+    <text class="card" x="0" y="333">MaterialRequest → MaterialRequestItem · InventoryItem → MaterialRequestItem</text>
+    <text class="card" x="0" y="356">MaterialRequest and InventoryItem are many-to-many through line items.</text>
+    <text class="card" x="0" y="383">InventoryItem → InventoryTransaction · MaterialRequest → InventoryTransaction</text>
+    <text class="small" x="0" y="420">“?” in FK text means nullable (zero or one parent).</text>
+    <text class="small" x="0" y="440">All FKs and referential actions are declared in schema.prisma.</text>
+  </g>
+  <rect x="1170" y="610" width="625" height="210" fill="#e8f4fd" stroke="#9fb3c8" rx="10"/>
+  <text class="name" x="1190" y="642">Relational join table</text>
+  <text class="card" x="1190" y="675">MATERIAL_REQUEST_ITEM carries requestedQty and approvedQty,</text>
+  <text class="card" x="1190" y="698">with a unique (materialRequestId, inventoryItemId) pair.</text>
+  <text class="card" x="1190" y="732">DUPLICATE_COMPLAINT_MATCH links two Complaint rows and records</text>
+  <text class="card" x="1190" y="755">similarity, classification and decision; pair is unique.</text>
+  <text class="card" x="1190" y="789">Feedback is unique per citizen and complaint.</text>
+  <text class="small" x="40" y="1040">Entity keys are shown in every card. Additional column descriptions, data access commands, and Mermaid ER source are in DATABASE.md.</text>
+</svg>

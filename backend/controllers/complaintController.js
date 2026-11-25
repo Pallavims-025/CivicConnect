@@ -33,9 +33,12 @@ const complaintInclude = {
 };
 
 const complaintListInclude = { ...complaintInclude };
-delete complaintListInclude.photos;
 delete complaintListInclude.workOrders;
-complaintListInclude._count = { select: { photos: { where: { locationVerificationStatus: 'VERIFIED' } } } };
+complaintListInclude.photos = {
+  ...complaintInclude.photos,
+  where: { photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' },
+};
+complaintListInclude._count = { select: { photos: { where: { photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' } } } };
 
 function toMapRecord(record) {
   const photosByUrl = new Map();
@@ -75,6 +78,7 @@ function toMapRecord(record) {
       id: photo.id,
       imageUrl: photo.imageUrl,
       photoSource: photo.photoSource || 'GALLERY',
+      photoType: photo.photoType || 'INITIAL_EVIDENCE',
       captureLatitude: photo.captureLatitude,
       captureLongitude: photo.captureLongitude,
       locationExtractionMethod: photo.locationExtractionMethod || 'NONE',
@@ -119,7 +123,7 @@ function toMapRecord(record) {
 
 function toMunicipalMapRecord(record) {
   const mapped = toMapRecord(record);
-  const verifiedEvidence = mapped.photoLocationEvidence.filter((photo) => photo.locationVerificationStatus === 'VERIFIED');
+  const verifiedEvidence = mapped.photoLocationEvidence.filter((photo) => photo.photoType === 'INITIAL_EVIDENCE' && photo.locationVerificationStatus === 'VERIFIED');
   const verifiedUrls = new Set(verifiedEvidence.map((photo) => normalizePhoto(photo.imageUrl) || photo.imageUrl));
   return {
     ...mapped,
@@ -134,7 +138,7 @@ function toMunicipalMapRecord(record) {
 }
 
 function toMunicipalRecordFromMapped(mapped) {
-  const verifiedEvidence = (mapped.photoLocationEvidence || []).filter((photo) => photo.locationVerificationStatus === 'VERIFIED');
+  const verifiedEvidence = (mapped.photoLocationEvidence || []).filter((photo) => photo.photoType === 'INITIAL_EVIDENCE' && photo.locationVerificationStatus === 'VERIFIED');
   const verifiedUrls = new Set(verifiedEvidence.map((photo) => normalizePhoto(photo.imageUrl) || photo.imageUrl));
   return {
     ...mapped,
@@ -169,7 +173,7 @@ export async function retryComplaintPhotoVerification(req, res, next) {
     if (!complaint || !canCitizenRetryPhotoVerification(complaint, req.user.id)) return res.status(404).json({ success: false, errors: { general: 'Complaint not found.' } });
 
     const existingVerifiedPhoto = await prisma.complaintPhoto.findFirst({
-      where: { complaintId: complaint.id, locationVerificationStatus: 'VERIFIED' },
+      where: { complaintId: complaint.id, photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' },
       select: { id: true },
     });
     if (existingVerifiedPhoto) return res.status(409).json({ success: false, errors: { general: 'This complaint already has a verified photograph.' } });
@@ -186,7 +190,7 @@ export async function retryComplaintPhotoVerification(req, res, next) {
       });
       if (!currentComplaint) return null;
       const alreadyVerified = await tx.complaintPhoto.findFirst({
-        where: { complaintId: currentComplaint.id, locationVerificationStatus: 'VERIFIED' },
+        where: { complaintId: currentComplaint.id, photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' },
         select: { id: true },
       });
       if (alreadyVerified) return null;
@@ -436,7 +440,7 @@ export async function getOfficerComplaint(req, res, next) {
   try {
     const record = await prisma.complaint.findFirst({
       where: { AND: [{ OR: [{ id: req.params.id }, { complaintCode: req.params.id }] }, VERIFIED_COMPLAINT_WHERE] },
-      include: { ...complaintInclude, duplicateOf: { select: { id: true, complaintCode: true, title: true, photos: { where: { locationVerificationStatus: 'VERIFIED' }, select: { locationVerificationStatus: true } } } }, duplicateMatches: { include: { matchedComplaint: { include: complaintInclude } }, orderBy: { similarityScore: 'desc' } } },
+      include: { ...complaintInclude, duplicateOf: { select: { id: true, complaintCode: true, title: true, photos: { where: { photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' }, select: { photoType: true, locationVerificationStatus: true } } } }, duplicateMatches: { include: { matchedComplaint: { include: complaintInclude } }, orderBy: { similarityScore: 'desc' } } },
     });
     if (!record) return res.status(404).json({ success: false, errors: { general: 'Complaint not found.' } });
     return res.json({ success: true, data: toMunicipalMapRecord(record) });

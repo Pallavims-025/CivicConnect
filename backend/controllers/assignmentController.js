@@ -20,7 +20,7 @@ const workOrderInclude = {
     include: {
       category: { select: { id: true, name: true } },
       user: { select: { id: true, name: true, email: true, phone: true } },
-      photos: { where: { locationVerificationStatus: 'VERIFIED' }, select: { id: true, imageUrl: true, caption: true, createdAt: true } },
+      photos: { where: { photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' }, select: { id: true, imageUrl: true, caption: true, createdAt: true } },
       statusHistory: { orderBy: { createdAt: 'asc' } },
     },
   },
@@ -93,8 +93,8 @@ export async function assignComplaint(req, res, next) {
 
     const assignment = await prisma.$transaction(async (tx) => {
       const stillEligible = await tx.complaint.findFirst({
-        where: { id: complaint.id },
-        select: { id: true, photos: { where: { locationVerificationStatus: 'VERIFIED' }, select: { id: true, locationVerificationStatus: true }, take: 1 } },
+        where: { AND: [{ id: complaint.id }, VERIFIED_COMPLAINT_WHERE] },
+        select: { id: true, status: true, photos: { where: { photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' }, select: { id: true, locationVerificationStatus: true, photoType: true }, take: 1 } },
       });
       if (!stillEligible) throw Object.assign(new Error('Complaint not found.'), { status: 404 });
       assertComplaintHasVerifiedPhoto(stillEligible);
@@ -360,7 +360,7 @@ export async function completeAssignment(req, res, next) {
     }
     const completionPhotos = parseComplaintPhotos(photos);
     if (!completionPhotos.length) return res.status(422).json({ success: false, errors: { photos: 'Upload at least one completion photograph.' } });
-    const assignment = await prisma.workOrder.findFirst({ where: { id: req.params.id, supervisorId: req.user.id, ...VERIFIED_WORK_ORDER_WHERE }, include: { complaint: { include: { photos: { where: { locationVerificationStatus: 'VERIFIED' }, take: 1, select: { imageUrl: true } } } } } });
+    const assignment = await prisma.workOrder.findFirst({ where: { id: req.params.id, supervisorId: req.user.id, ...VERIFIED_WORK_ORDER_WHERE }, include: { complaint: { include: { photos: { where: { photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' }, take: 1, select: { imageUrl: true } } } } } });
     if (!assignment) return res.status(404).json({ success: false, errors: { general: 'Assignment not found for this supervisor.' } });
     if (!['IN_PROGRESS', 'REWORK_REQUIRED'].includes(assignment.status)) {
       return res.status(409).json({ success: false, errors: { general: 'Start or resume this assignment before submitting completion.' } });
@@ -435,7 +435,7 @@ export async function listPendingVerifications(req, res, next) {
     const verifications = await prisma.repairVerification.findMany({
       where: { status: 'AWAITING_VERIFICATION', workOrder: { assignedByOfficerId: req.user.id, complaint: VERIFIED_COMPLAINT_WHERE } },
       include: {
-        complaint: { include: { category: true, user: { select: { id: true, name: true, email: true, phone: true } }, photos: { where: { locationVerificationStatus: 'VERIFIED' } } } },
+        complaint: { include: { category: true, user: { select: { id: true, name: true, email: true, phone: true } }, photos: { where: { photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' } } } },
         workOrder: { include: workOrderInclude },
         submittedBySupervisor: { select: { id: true, name: true, email: true, phone: true } },
         verifiedByOfficer: { select: { id: true, name: true } },
@@ -457,7 +457,7 @@ export async function reviewCompletion(req, res, next) {
       include: {
         workOrder: {
           include: {
-            complaint: { include: { user: true, photos: { where: { locationVerificationStatus: 'VERIFIED' } } } },
+            complaint: { include: { user: true, photos: { where: { photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' } } } },
             supervisor: true,
           },
         },
@@ -507,8 +507,18 @@ export async function reviewCompletion(req, res, next) {
 
 export async function listNotifications(req, res, next) {
   try {
+    const where = { userId: req.user.id };
+    if (req.user.role === 'OFFICER' || req.user.role === 'SUPERVISOR') {
+      where.AND = [{
+        OR: [
+          { complaintId: null, workOrderId: null },
+          { complaint: VERIFIED_COMPLAINT_WHERE },
+          { workOrder: { complaint: VERIFIED_COMPLAINT_WHERE } },
+        ],
+      }];
+    }
     const notifications = await prisma.notification.findMany({
-      where: { userId: req.user.id },
+      where,
       include: {
         complaint: { select: { complaintCode: true } },
         workOrder: { select: { workOrderCode: true } },
@@ -522,7 +532,17 @@ export async function listNotifications(req, res, next) {
 
 export async function countUnreadNotifications(req, res, next) {
   try {
-    const count = await prisma.notification.count({ where: { userId: req.user.id, isRead: false } });
+    const where = { userId: req.user.id, isRead: false };
+    if (req.user.role === 'OFFICER' || req.user.role === 'SUPERVISOR') {
+      where.AND = [{
+        OR: [
+          { complaintId: null, workOrderId: null },
+          { complaint: VERIFIED_COMPLAINT_WHERE },
+          { workOrder: { complaint: VERIFIED_COMPLAINT_WHERE } },
+        ],
+      }];
+    }
+    const count = await prisma.notification.count({ where });
     res.json({ success: true, data: { count } });
   } catch (error) { next(error); }
 }

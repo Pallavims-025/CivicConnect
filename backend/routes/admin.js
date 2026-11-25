@@ -13,6 +13,7 @@ import {
   getAuditLogs,
 } from '../controllers/adminController.js';
 import { getAdminProfile, uploadAdminProfilePhoto } from '../controllers/adminProfileController.js';
+import { getAdminDashboard } from '../controllers/adminDashboardController.js';
 
 const router = Router();
 
@@ -25,6 +26,7 @@ router.post('/profile/photo', uploadAdminProfilePhoto);
 
 // Platform Telemetry & Stats
 router.get('/stats', getAdminStats);
+router.get('/dashboard', getAdminDashboard);
 
 // Audit Trail
 router.get('/audit', getAuditLogs);

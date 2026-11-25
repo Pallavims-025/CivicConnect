@@ -5,7 +5,7 @@ import { mkdir, writeFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { notifyUser } from '../lib/notificationService.js';
-import { VERIFIED_WORK_ORDER_WHERE } from '../lib/verifiedComplaint.js';
+import { VERIFIED_COMPLAINT_WHERE, VERIFIED_WORK_ORDER_WHERE } from '../lib/verifiedComplaint.js';
 
 const supervisorAvatarDirectory = new URL('../uploads/supervisor-avatars/', import.meta.url);
 const supervisorAvatarPath = fileURLToPath(supervisorAvatarDirectory);
@@ -20,7 +20,7 @@ async function removeSupervisorAvatar(avatarUrl) {
 
 const workOrderInclude = {
   department: true,
-  complaint: { include: { category: true, user: { select: { id: true, name: true } }, photos: { where: { locationVerificationStatus: 'VERIFIED' } } } },
+  complaint: { include: { category: true, user: { select: { id: true, name: true } }, photos: { where: { photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' } } } },
   photos: { orderBy: { createdAt: 'asc' } },
   statusHistory: { orderBy: { createdAt: 'asc' } },
   materialRequests: { include: { items: { include: { inventoryItem: true } } } },
@@ -178,8 +178,18 @@ export async function getSupervisorDashboardData(req, res, next) {
     const [requests, transactions, notifications, workerTasks] = await Promise.all([
       prisma.materialRequest.findMany({ where: { requestedByUserId: req.user.id, workOrderId: { in: orderIds } }, include: { items: { include: { inventoryItem: true } }, workOrder: { select: { id: true, workOrderCode: true, complaintId: true, department: { select: { name: true } } } } }, orderBy: { requestDate: 'desc' } }),
       orderIds.length ? prisma.inventoryTransaction.findMany({ where: { workOrderId: { in: orderIds } }, include: { inventoryItem: true }, orderBy: { createdAt: 'desc' } }) : [],
-      prisma.notification.findMany({ where: { userId: req.user.id }, orderBy: { createdAt: 'desc' }, take: 100 }),
-      prisma.$queryRaw`SELECT task.id, task.work_order_id AS workOrderId, task.supervisor_id AS supervisorId, task.worker_name AS workerName, task.worker_contact AS workerContact, task.task_description AS taskDescription, task.deadline, task.progress, task.status, task.delay_reason AS delayReason, task.created_at AS createdAt, task.updated_at AS updatedAt, order_record.work_order_code AS workOrderCode FROM supervisor_worker_tasks task JOIN work_orders order_record ON order_record.id = task.work_order_id WHERE task.supervisor_id = ${req.user.id} AND EXISTS (SELECT 1 FROM complaint_photos verified_photo WHERE verified_photo.complaint_id = order_record.complaint_id AND verified_photo.location_verification_status = 'VERIFIED') ORDER BY task.created_at DESC`,
+      prisma.notification.findMany({
+        where: {
+          userId: req.user.id,
+          OR: [
+            { complaintId: null, workOrderId: null },
+            { complaint: VERIFIED_COMPLAINT_WHERE },
+            { workOrder: { complaint: VERIFIED_COMPLAINT_WHERE } },
+          ],
+        },
+        orderBy: { createdAt: 'desc' }, take: 100,
+      }),
+      prisma.$queryRaw`SELECT task.id, task.work_order_id AS workOrderId, task.supervisor_id AS supervisorId, task.worker_name AS workerName, task.worker_contact AS workerContact, task.task_description AS taskDescription, task.deadline, task.progress, task.status, task.delay_reason AS delayReason, task.created_at AS createdAt, task.updated_at AS updatedAt, order_record.work_order_code AS workOrderCode FROM supervisor_worker_tasks task JOIN work_orders order_record ON order_record.id = task.work_order_id JOIN complaints eligible_complaint ON eligible_complaint.id = order_record.complaint_id AND eligible_complaint.status <> 'REJECTED' WHERE task.supervisor_id = ${req.user.id} AND EXISTS (SELECT 1 FROM complaint_photos verified_photo WHERE verified_photo.complaint_id = order_record.complaint_id AND verified_photo.photo_type = 'INITIAL_EVIDENCE' AND verified_photo.location_verification_status = 'VERIFIED') ORDER BY task.created_at DESC`,
     ]);
     res.json({ success: true, data: { profile, orders, inventory, requests, transactions, notifications, workerTasks } });
   } catch (error) { next(error); }

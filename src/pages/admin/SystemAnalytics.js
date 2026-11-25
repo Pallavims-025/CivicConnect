@@ -1,275 +1,71 @@
 import React, { useState } from 'react';
+import { AlertCircle, BarChart3, RefreshCw, TrendingUp } from 'lucide-react';
 import {
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
+  Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart,
+  ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import {
-  BarChart3,
-  TrendingUp,
-  Clock,
-  CheckCircle2,
-  Calendar,
-  AlertTriangle,
-  Download,
-  Filter,
-  Users,
-  Building2,
-  DollarSign,
-  ShieldCheck,
-} from 'lucide-react';
-import { useCivic } from '../../context/CivicContext';
+import { useAdminDashboard } from '../../hooks/useAdminDashboard';
+
+const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EF4444', '#06B6D4'];
+const chartPanel = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-xs';
+const chartHeight = 'grid h-64 place-items-center text-sm text-slate-500';
 
 export function SystemAnalytics() {
-  const { complaints, workOrders, departments, users } = useCivic();
-
-  const [dateRange, setDateRange] = useState('30_DAYS');
-
-  const totalComplaints = complaints?.length || 0;
-  const resolvedComplaints = complaints?.filter((c) => c.status === 'RESOLVED').length || 0;
-  const resolutionRate = totalComplaints > 0 ? Math.round((resolvedComplaints / totalComplaints) * 100) : 0;
-  const inProgressCount = complaints?.filter((c) => c.status === 'IN_PROGRESS' || c.status === 'UNDER_REVIEW').length || 0;
-
-  // Department-wise complaint distribution
-  const deptData = (departments || []).map((dept) => {
-    const deptComplaints = (complaints || []).filter(
-      (c) => (c.assignedDepartment || '').toLowerCase() === (dept.name || '').toLowerCase()
-    );
-    const resolvedInDept = deptComplaints.filter((c) => c.status === 'RESOLVED').length;
-    return {
-      name: dept.name.length > 18 ? dept.name.substring(0, 16) + '...' : dept.name,
-      fullName: dept.name,
-      reported: deptComplaints.length || Math.floor(Math.random() * 8 + 3),
-      resolved: resolvedInDept || Math.floor(Math.random() * 5 + 2),
-    };
-  });
-
-  // User Role distribution
-  const roleCounts = [
-    { name: 'Citizens', value: users?.filter((u) => (u.role || '').toLowerCase() === 'citizen').length || 1, color: '#3B82F6' },
-    { name: 'Officers', value: users?.filter((u) => (u.role || '').toLowerCase() === 'officer').length || 1, color: '#10B981' },
-    { name: 'Supervisors', value: users?.filter((u) => (u.role || '').toLowerCase() === 'supervisor').length || 0, color: '#F59E0B' },
-    { name: 'Admins', value: users?.filter((u) => (u.role || '').toLowerCase() === 'admin').length || 1, color: '#8B5CF6' },
-  ];
-
-  // Resolution Turnaround timeline
-  const turnaroundData = [
-    { week: 'Week 1', avgHours: 42, targetSLA: 48 },
-    { week: 'Week 2', avgHours: 36, targetSLA: 48 },
-    { week: 'Week 3', avgHours: 29, targetSLA: 48 },
-    { week: 'Week 4', avgHours: 24, targetSLA: 48 },
-  ];
+  const [range, setRange] = useState('30_DAYS');
+  const { data, loading, refreshing, error, refresh } = useAdminDashboard(range);
+  const stats = data?.stats || {};
+  const hasComplaints = (stats.totalComplaints || 0) > 0;
+  const hasUsers = (data?.usersByRole || []).some((item) => item.count > 0);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <BarChart3 className="text-blue-600 w-6 h-6" /> System Analytics & Platform Telemetry
-          </h1>
-          <p className="text-sm text-slate-500">
-            Cross-departmental performance indicators, SLA resolution turnaround, and operational telemetry
-          </p>
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-900"><BarChart3 className="h-6 w-6 text-blue-600" />System Analytics &amp; Platform Telemetry</h1>
+          <p className="text-sm text-slate-500">Complaint and account analytics from current database records.</p>
         </div>
-
-        <div className="flex items-center gap-2">
-          <select
-            value={dateRange}
-            onChange={(e) => setDateRange(e.target.value)}
-            className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-600 shadow-xs"
-          >
-            <option value="7_DAYS">Last 7 Days</option>
-            <option value="30_DAYS">Last 30 Days</option>
-            <option value="90_DAYS">Quarter to Date</option>
-            <option value="YEAR">Fiscal Year 2026</option>
+        <div className="flex gap-2">
+          <select aria-label="Chart date range" value={range} onChange={(event) => setRange(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
+            <option value="7_DAYS">Last 7 days</option><option value="30_DAYS">Last 30 days</option><option value="90_DAYS">Last 90 days</option><option value="YEAR">Last year</option>
           </select>
+          <button onClick={refresh} disabled={refreshing} className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 disabled:opacity-50" aria-label="Refresh analytics"><RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} /></button>
         </div>
+      </header>
+
+      {error && <div role="alert" className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700"><AlertCircle size={16} />{error}<button onClick={refresh} className="ml-auto font-semibold underline">Retry</button></div>}
+
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[
+          ['Total complaints', stats.totalComplaints],
+          ['Verified complaints', stats.verifiedComplaints],
+          ['Completed', stats.completedComplaints],
+          ['Resolution rate', `${stats.resolutionRate ?? 0}%`],
+        ].map(([label, value]) => <article key={label} className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-semibold uppercase text-slate-500">{label}</p><p className="mt-2 text-2xl font-extrabold text-slate-900">{loading ? '…' : (value ?? 0)}</p></article>)}
+      </section>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section className={chartPanel}>
+          <div className="mb-4 flex items-center justify-between"><h2 className="text-sm font-bold text-slate-900">Department Performance: Reported vs Resolved</h2><span className="text-[11px] text-slate-400">All recorded complaints</span></div>
+          {loading ? <p className={chartHeight}>Loading chart…</p> : data?.departmentPerformance?.length ? <div className="h-64"><ResponsiveContainer width="100%" height="100%"><BarChart data={data.departmentPerformance} margin={{ top: 10, right: 10, left: -12, bottom: 24 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-15} textAnchor="end" /><YAxis allowDecimals={false} />
+            <Tooltip formatter={(value, name) => [value, name === 'Reported' ? 'Complaints Reported' : 'Complaints Resolved']} labelFormatter={(label) => `Department: ${label}`} /><Legend />
+            <Bar dataKey="reported" fill="#3B82F6" name="Reported" radius={[4, 4, 0, 0]} /><Bar dataKey="resolved" fill="#10B981" name="Resolved" radius={[4, 4, 0, 0]} />
+          </BarChart></ResponsiveContainer></div> : <p className={chartHeight}>No department complaint data yet.</p>}
+        </section>
+
+        <section className={chartPanel}><h2 className="mb-4 text-sm font-bold text-slate-900">Complaints by status</h2>{loading ? <p className={chartHeight}>Loading chart…</p> : hasComplaints ? <div className="h-64"><ResponsiveContainer width="100%" height="100%"><BarChart data={data.complaintsByStatus} margin={{ left: 4, right: 12 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="label" tick={{ fontSize: 10 }} interval={0} angle={-15} textAnchor="end" height={48} /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="count" fill="#3B82F6" name="Complaints" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer></div> : <p className={chartHeight}>No complaint records yet.</p>}</section>
+
+        <section className={chartPanel}><h2 className="mb-4 text-sm font-bold text-slate-900">Complaints by category</h2>{loading ? <p className={chartHeight}>Loading chart…</p> : data?.complaintsByCategory?.length ? <div className="h-64"><ResponsiveContainer width="100%" height="100%"><BarChart data={data.complaintsByCategory} layout="vertical" margin={{ left: 12, right: 15 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" allowDecimals={false} /><YAxis type="category" dataKey="category" width={115} tick={{ fontSize: 10 }} /><Tooltip /><Bar dataKey="count" fill="#10B981" name="Complaints" radius={[0, 4, 4, 0]} /></BarChart></ResponsiveContainer></div> : <p className={chartHeight}>No category data yet.</p>}</section>
+
+        <section className={chartPanel}>
+          <div className="mb-4 flex items-center justify-between"><h2 className="text-sm font-bold text-slate-900">Submission and resolution trend</h2><span className="text-[11px] text-slate-400">{range.replace('_', ' ').toLowerCase()}</span></div>
+          {loading ? <p className={chartHeight}>Loading chart…</p> : hasComplaints ? <div className="h-64"><ResponsiveContainer width="100%" height="100%"><LineChart data={data.submissionAndResolutionTrends} margin={{ left: 2, right: 12 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" tick={{ fontSize: 9 }} interval="preserveStartEnd" /><YAxis allowDecimals={false} /><Tooltip /><Legend /><Line type="monotone" dataKey="submitted" name="Submitted" stroke="#3B82F6" strokeWidth={2} dot={false} /><Line type="monotone" dataKey="resolved" name="Resolved" stroke="#10B981" strokeWidth={2} dot={false} /></LineChart></ResponsiveContainer></div> : <p className={chartHeight}>No complaint trend data yet.</p>}
+        </section>
+
+        <section className={chartPanel}><h2 className="mb-4 text-sm font-bold text-slate-900">Platform User Distribution</h2>{loading ? <p className={chartHeight}>Loading chart…</p> : hasUsers ? <div className="h-64"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={data.usersByRole.map((item) => ({ name: item.role.toLowerCase().replaceAll('_', ' '), value: item.count }))} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={3}>{data.usersByRole.map((item, index) => <Cell key={item.role} fill={COLORS[index % COLORS.length]} />)}</Pie><Tooltip /><Legend /></PieChart></ResponsiveContainer></div> : <p className={chartHeight}>No registered users yet.</p>}</section>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <div className="flex justify-between items-center text-xs font-semibold text-slate-500 uppercase">
-            <span>Overall Resolution</span>
-            <TrendingUp className="text-emerald-600 w-4 h-4" />
-          </div>
-          <div className="text-2xl font-extrabold text-slate-900 mt-2">{resolutionRate}%</div>
-          <div className="text-[11px] text-emerald-600 font-medium mt-0.5">{resolvedComplaints} of {totalComplaints} resolved</div>
-        </div>
-
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <div className="flex justify-between items-center text-xs font-semibold text-slate-500 uppercase">
-            <span>Average SLA</span>
-            <Clock className="text-blue-600 w-4 h-4" />
-          </div>
-          <div className="text-2xl font-extrabold text-slate-900 mt-2">26.4 hrs</div>
-          <div className="text-[11px] text-blue-600 font-medium mt-0.5">Target: Under 48 hours</div>
-        </div>
-
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <div className="flex justify-between items-center text-xs font-semibold text-slate-500 uppercase">
-            <span>Active Deployments</span>
-            <AlertTriangle className="text-amber-500 w-4 h-4" />
-          </div>
-          <div className="text-2xl font-extrabold text-slate-900 mt-2">{workOrders?.length || 0}</div>
-          <div className="text-[11px] text-amber-600 font-medium mt-0.5">{inProgressCount} in progress</div>
-        </div>
-
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <div className="flex justify-between items-center text-xs font-semibold text-slate-500 uppercase">
-            <span>Platform Coverage</span>
-            <ShieldCheck className="text-purple-600 w-4 h-4" />
-          </div>
-          <div className="text-2xl font-extrabold text-slate-900 mt-2">{departments?.length || 4} Depts</div>
-          <div className="text-[11px] text-purple-600 font-medium mt-0.5">Wards 1-18 Covered</div>
-        </div>
-      </div>
-
-      {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Department Throughput Comparison */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="font-bold text-slate-900 text-sm">Department Performance: Reported vs Resolved</h3>
-            <span className="text-[11px] text-slate-400 font-medium">Monthly throughput</span>
-          </div>
-
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={deptData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748B' }} interval={0} angle={-15} textAnchor="end" />
-                <YAxis tick={{ fontSize: 11, fill: '#64748B' }} />
-                <Tooltip
-                  formatter={(value, name) => [
-                    value,
-                    name === 'Reported'
-                      ? 'Complaints Reported'
-                      : 'Complaints Resolved'
-                  ]}
-                  labelFormatter={(label) => `Department: ${label}`}
-                  contentStyle={{
-                    backgroundColor: '#1E293B',
-                    color: '#fff',
-                    borderRadius: '8px',
-                    fontSize: '12px'
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                <Bar dataKey="reported" fill="#3B82F6" name="Reported" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="resolved" fill="#10B981" name="Resolved" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* SLA Turnaround Speed */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="font-bold text-slate-900 text-sm">SLA Resolution Turnaround (Hours)</h3>
-            <span className="text-[11px] text-emerald-600 font-medium">Improving by 43%</span>
-          </div>
-
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={turnaroundData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                <XAxis dataKey="week" tick={{ fontSize: 11, fill: '#64748B' }} />
-                <YAxis tick={{ fontSize: 11, fill: '#64748B' }} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#1E293B', color: '#fff', borderRadius: '8px', fontSize: '12px' }}
-                />
-                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                <Line type="monotone" dataKey="avgHours" stroke="#2563EB" strokeWidth={3} name="Average Hours" dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="targetSLA" stroke="#EF4444" strokeDasharray="5 5" name="SLA Ceiling (48h)" />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* User Role Distribution */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="font-bold text-slate-900 text-sm">Platform User Distribution</h3>
-            <span className="text-[11px] text-slate-400 font-medium">Active Accounts</span>
-          </div>
-
-          <div className="h-60 flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={roleCounts}
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {roleCounts.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#1E293B', color: '#fff', borderRadius: '8px', fontSize: '12px' }}
-                />
-                <Legend wrapperStyle={{ fontSize: '11px' }} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Municipal SDG & Telemetry Highlights */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="font-bold text-slate-900 text-sm">SDG 11 Sustainable Cities Compliance</h3>
-            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full">
-              GRADE A
-            </span>
-          </div>
-
-          <div className="space-y-3 text-xs">
-            <div className="p-3 bg-slate-50 rounded-xl space-y-1">
-              <div className="flex justify-between font-semibold text-slate-800">
-                <span>Public Grievance Response Index</span>
-                <span className="text-emerald-600 font-bold">92%</span>
-              </div>
-              <div className="w-full bg-slate-200 rounded-full h-1.5">
-                <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: '92%' }}></div>
-              </div>
-            </div>
-
-            <div className="p-3 bg-slate-50 rounded-xl space-y-1">
-              <div className="flex justify-between font-semibold text-slate-800">
-                <span>Field Crew First-Time Fix Rate</span>
-                <span className="text-blue-600 font-bold">85%</span>
-              </div>
-              <div className="w-full bg-slate-200 rounded-full h-1.5">
-                <div className="bg-blue-600 h-1.5 rounded-full" style={{ width: '85%' }}></div>
-              </div>
-            </div>
-
-            <div className="p-3 bg-slate-50 rounded-xl space-y-1">
-              <div className="flex justify-between font-semibold text-slate-800">
-                <span>Geotag & Photo Evidence Verification Rate</span>
-                <span className="text-purple-600 font-bold">98%</span>
-              </div>
-              <div className="w-full bg-slate-200 rounded-full h-1.5">
-                <div className="bg-purple-600 h-1.5 rounded-full" style={{ width: '98%' }}></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <p className="flex items-center justify-end gap-1 text-[11px] text-slate-400"><TrendingUp size={13} />Auto-refreshes every 30 seconds{data?.refreshedAt ? ` · Updated ${new Date(data.refreshedAt).toLocaleTimeString()}` : ''}</p>
     </div>
   );
 }
