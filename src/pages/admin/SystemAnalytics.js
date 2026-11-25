@@ -152,8 +152,19 @@ export function SystemAnalytics() {
                 <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748B' }} interval={0} angle={-15} textAnchor="end" />
                 <YAxis tick={{ fontSize: 11, fill: '#64748B' }} />
                 <Tooltip
-                  formatter={(val, name) => [val, name === 'reported' ? 'Complaints Reported' : 'Complaints Resolved']}
-                  contentStyle={{ backgroundColor: '#1E293B', color: '#fff', borderRadius: '8px', fontSize: '12px' }}
+                  formatter={(value, name) => [
+                    value,
+                    name === 'Reported'
+                      ? 'Complaints Reported'
+                      : 'Complaints Resolved'
+                  ]}
+                  labelFormatter={(label) => `Department: ${label}`}
+                  contentStyle={{
+                    backgroundColor: '#1E293B',
+                    color: '#fff',
+                    borderRadius: '8px',
+                    fontSize: '12px'
+                  }}
                 />
                 <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
                 <Bar dataKey="reported" fill="#3B82F6" name="Reported" radius={[4, 4, 0, 0]} />
