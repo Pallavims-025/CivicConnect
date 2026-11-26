@@ -92,9 +92,113 @@ function activityFromStatus(entry) {
   };
 }
 
+function getMockAdminDashboardData(range = '30_DAYS') {
+  const daysByRange = { '7_DAYS': 7, '30_DAYS': 30, '90_DAYS': 90, YEAR: 365 };
+  const days = daysByRange[range] || 30;
+  const now = new Date();
+  const trends = [];
+  for (let i = days - 1; i >= 0; i -= 1) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    const submitted = Math.max(1, Math.floor(Math.sin(i / 2) * 3 + 6));
+    const resolved = Math.max(0, Math.floor(Math.cos(i / 2) * 2 + 5));
+    trends.push({ date: key, submitted, resolved });
+  }
+
+  return {
+    stats: {
+      totalRegisteredCitizens: 1248,
+      totalMunicipalOfficers: 38,
+      totalFieldSupervisors: 14,
+      totalComplaints: 342,
+      verifiedComplaints: 289,
+      rejectedComplaints: 18,
+      pendingVerificationComplaints: 35,
+      assignedComplaints: 215,
+      inProgressComplaints: 84,
+      completedComplaints: 198,
+      unresolvedComplaints: 144,
+      resolutionRate: 58,
+    },
+    complaintsByStatus: [
+      { status: 'PENDING', label: 'PENDING', count: 35 },
+      { status: 'UNDER_REVIEW', label: 'UNDER REVIEW', count: 25 },
+      { status: 'IN_PROGRESS', label: 'IN PROGRESS', count: 84 },
+      { status: 'RESOLVED', label: 'RESOLVED', count: 198 },
+      { status: 'REJECTED', label: 'REJECTED', count: 18 },
+    ],
+    complaintsByCategory: [
+      { category: 'Potholes & Road Damage', count: 112 },
+      { category: 'Garbage & Solid Waste', count: 89 },
+      { category: 'Streetlight Failure', count: 64 },
+      { category: 'Water Pipeline Leakage', count: 47 },
+      { category: 'Drainage & Sewage', count: 30 },
+    ],
+    departmentPerformance: [
+      { name: 'Roads & Infra', fullName: 'Road Infrastructure & Maintenance', reported: 112, resolved: 78 },
+      { name: 'Solid Waste Mgmt', fullName: 'Solid Waste Management', reported: 89, resolved: 62 },
+      { name: 'Electrical & Light', fullName: 'Street Lighting & Electrical Works', reported: 64, resolved: 41 },
+      { name: 'Water & Sewage', fullName: 'Water Supply & Sewage Board', reported: 47, resolved: 29 },
+    ],
+    usersByRole: [
+      { role: 'CITIZEN', count: 1248 },
+      { role: 'OFFICER', count: 38 },
+      { role: 'SUPERVISOR', count: 14 },
+      { role: 'ADMIN', count: 4 },
+    ],
+    submissionAndResolutionTrends: trends,
+    activities: [
+      {
+        id: 'act-1',
+        type: 'COMPLAINT',
+        title: 'Road repair in progress',
+        description: 'CMP-2026-089 · Indiranagar 100ft road pothole patch underway by Ward 8 team',
+        actor: 'Dr. Aruna Rao',
+        at: new Date(Date.now() - 1000 * 60 * 15),
+        complaintCode: 'CMP-2026-089',
+      },
+      {
+        id: 'act-2',
+        type: 'VERIFICATION',
+        title: 'Complaint photo verified',
+        description: 'CMP-2026-092 · GPS coordinates matched within 12 meters of civic asset tag',
+        actor: 'Verification service',
+        at: new Date(Date.now() - 1000 * 60 * 45),
+        complaintCode: 'CMP-2026-092',
+      },
+      {
+        id: 'act-3',
+        type: 'WORK_ORDER',
+        title: 'Work order dispatched',
+        description: 'WO-2026-031 · Drainage cleaning assigned to Field Supervisor Rajesh Kumar',
+        actor: 'Santosh (Admin)',
+        at: new Date(Date.now() - 1000 * 60 * 120),
+        complaintCode: 'CMP-2026-074',
+        workOrderCode: 'WO-2026-031',
+      },
+      {
+        id: 'act-4',
+        type: 'USER',
+        title: 'New user registered',
+        description: 'Kavita Nair joined as officer.',
+        actor: 'Kavita Nair',
+        at: new Date(Date.now() - 1000 * 60 * 240),
+      },
+    ],
+    departments: [
+      { id: 1, name: 'Road Infrastructure & Maintenance', code: 'DEPT-ROADS', categoryCount: 3, _count: { users: 12, complaints: 112, workOrders: 45 } },
+      { id: 2, name: 'Solid Waste Management', code: 'DEPT-SWM', categoryCount: 3, _count: { users: 10, complaints: 89, workOrders: 38 } },
+      { id: 3, name: 'Street Lighting & Electrical Works', code: 'DEPT-LIGHT', categoryCount: 3, _count: { users: 8, complaints: 64, workOrders: 27 } },
+      { id: 4, name: 'Water Supply & Sewage Board', code: 'DEPT-WATER', categoryCount: 3, _count: { users: 8, complaints: 47, workOrders: 21 } },
+    ],
+    refreshedAt: new Date(),
+  };
+}
+
 export async function getAdminDashboard(req, res, next) {
+  const range = ['7_DAYS', '30_DAYS', '90_DAYS', 'YEAR'].includes(req.query.range) ? req.query.range : '30_DAYS';
   try {
-    const range = ['7_DAYS', '30_DAYS', '90_DAYS', 'YEAR'].includes(req.query.range) ? req.query.range : '30_DAYS';
     const [users, complaints, departments, recentUsers, complaintHistory, workOrderHistory, photoEvents, repairEvents, repairPhotoEvents] = await Promise.all([
       prisma.user.findMany({ select: { id: true, role: true } }),
       prisma.complaint.findMany({
@@ -215,6 +319,14 @@ export async function getAdminDashboard(req, res, next) {
       source: 'database',
     });
   } catch (error) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[Admin Dashboard] MySQL query failed or offline. Returning fallback data:', error.message);
+      return res.json({
+        success: true,
+        data: getMockAdminDashboardData(range),
+        source: 'memory_fallback',
+      });
+    }
     next(error);
   }
 }

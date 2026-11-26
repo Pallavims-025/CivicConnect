@@ -277,6 +277,22 @@ export async function getAdminStats(req, res, next) {
       source: 'database',
     });
   } catch (err) {
+    if (process.env.NODE_ENV !== 'production') {
+      return res.json({
+        success: true,
+        data: {
+          totalComplaints: 342,
+          resolvedComplaints: 198,
+          pendingComplaints: 35,
+          workOrdersCount: 84,
+          usersCount: 1300,
+          departmentsCount: 4,
+          resolutionRate: 58,
+          dbStatus: 'offline_fallback',
+        },
+        source: 'memory_fallback',
+      });
+    }
     next(err);
   }
 }
