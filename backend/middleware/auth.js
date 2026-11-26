@@ -88,11 +88,12 @@ export async function authenticate(req, res, next) {
 
     if (!user) {
       if (process.env.NODE_ENV !== 'production') {
+        const fallbackRole = payload.role || 'CITIZEN';
         req.user = {
           id: payload.sub,
-          name: payload.name || 'Santosh (Admin)',
-          email: payload.email || 'admin@civicconnect.org',
-          role: payload.role || 'ADMIN',
+          name: payload.name || (fallbackRole === 'ADMIN' ? 'Santosh (Admin)' : fallbackRole === 'OFFICER' ? 'Dr. Aruna Rao' : fallbackRole === 'SUPERVISOR' ? 'Rajesh Kumar' : 'Priya Sharma'),
+          email: payload.email || `${fallbackRole.toLowerCase()}@civicconnect.org`,
+          role: fallbackRole,
           approvalStatus: 'APPROVED',
           isActive: true,
           department: { name: 'IT & Digital Governance', code: 'DEPT-ADMIN' },
@@ -134,11 +135,12 @@ export async function authenticate(req, res, next) {
     next();
   } catch (err) {
     if (process.env.NODE_ENV !== 'production') {
+      const fallbackRole = payload?.role || 'CITIZEN';
       req.user = {
-        id: payload.sub,
-        name: payload.name || 'Santosh (Admin)',
-        email: payload.email || 'admin@civicconnect.org',
-        role: payload.role || 'ADMIN',
+        id: payload?.sub || 'usr-demo',
+        name: payload?.name || (fallbackRole === 'ADMIN' ? 'Santosh (Admin)' : fallbackRole === 'OFFICER' ? 'Dr. Aruna Rao' : fallbackRole === 'SUPERVISOR' ? 'Rajesh Kumar' : 'Priya Sharma'),
+        email: payload?.email || `${fallbackRole.toLowerCase()}@civicconnect.org`,
+        role: fallbackRole,
         approvalStatus: 'APPROVED',
         isActive: true,
         department: { name: 'IT & Digital Governance', code: 'DEPT-ADMIN' },

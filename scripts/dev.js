@@ -22,7 +22,7 @@ if (apiAlreadyRunning) {
 } else {
   children.push({
     name: 'API',
-    child: spawn(process.execPath, ['--watch', 'backend/server.js'], { cwd: projectRoot, stdio: 'inherit' }),
+    child: spawn(process.execPath, ['--watch-path=backend', 'backend/server.js'], { cwd: projectRoot, stdio: 'inherit' }),
   });
 }
 
