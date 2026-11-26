@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate, authorize } from '../middleware/auth.js';
+import { completeAssignment } from '../controllers/assignmentController.js';
 import {
   getSupervisorProfile,
   getSupervisorDashboardData,
@@ -16,7 +17,6 @@ import {
   deleteWorkerTask,
   recordMaterialMovement,
   submitMaterialRequisition,
-  submitPhotoEvidence,
   submitProgressReport,
 } from '../controllers/supervisorController.js';
 
@@ -54,7 +54,11 @@ router.post('/materials/transaction', recordMaterialMovement);
 router.post('/material-requests', submitMaterialRequisition);
 
 // POST /api/supervisor/photo-evidence
-router.post('/photo-evidence', submitPhotoEvidence);
+router.post('/photo-evidence', (req, res, next) => {
+  req.params.id = req.body.workOrderId;
+  req.body = { photos: req.body.afterPhotos, remarks: req.body.repairNotes };
+  return completeAssignment(req, res, next);
+});
 
 // POST /api/supervisor/progress-reports
 router.post('/progress-reports', submitProgressReport);

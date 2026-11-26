@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getOfficerComplaints } from '../services/api';
-import { isMunicipalComplaintEligible } from '../lib/municipalComplaintEligibility';
 
 export function useOfficerComplaints() {
   const [complaints, setComplaints] = useState([]);
@@ -13,11 +12,16 @@ export function useOfficerComplaints() {
     else setRefreshing(true);
     try {
       const result = await getOfficerComplaints();
+      if (!Array.isArray(result?.complaints)) {
+        throw new Error('The server returned an invalid municipal complaint list.');
+      }
       const unique = new Map();
-      for (const complaint of result?.complaints || []) {
-        if (!isMunicipalComplaintEligible(complaint)) continue;
+      for (const complaint of result.complaints) {
+        if (!complaint?.databaseId || !complaint?.id) {
+          throw new Error('A complaint record is missing its internal or public ID.');
+        }
         const photos = [...new Set((complaint.photos || []).map((photo) => typeof photo === 'string' ? photo.trim() : '').filter(Boolean))];
-        unique.set(complaint.databaseId || complaint.id, { ...complaint, photos });
+        unique.set(complaint.databaseId, { ...complaint, photos });
       }
       setComplaints([...unique.values()]);
       setError('');

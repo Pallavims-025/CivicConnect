@@ -86,10 +86,10 @@ export function Sidebar({ role = 'citizen', isOpen, onClose }) {
   // Section: Municipal Officer Sidebar Navigation
   const officerNav = [
     { label: 'Officer Dashboard', path: '/officer', icon: LayoutDashboard },
-    { label: 'Assigned Complaints', path: '/officer/complaints', icon: FileText, count: officerPendingCount, countColor: 'bg-amber-500' },
+    { label: 'Pending Complaints', path: '/officer/complaints', icon: FileText, count: officerPendingCount, countColor: 'bg-amber-500' },
     { label: 'Complaint Map', path: '/officer/map', icon: Map },
     { label: 'Duplicate Detection', path: '/officer/duplicates', icon: Copy, count: pendingDuplicateCount, countColor: 'bg-purple-500' },
-    { label: 'Work Orders', path: '/officer/work-orders', icon: Briefcase, count: workOrders.filter((w) => w.status === 'IN_PROGRESS').length },
+    { label: 'Work Orders', path: '/officer/work-orders', icon: Briefcase, count: complaints.flatMap((complaint) => complaint.assignments || []).filter((assignment) => assignment.status === 'IN_PROGRESS').length },
     { label: 'Materials & Inventory', path: '/officer/inventory', icon: Package },
     { label: 'Repair Verification', path: '/officer/verifications', icon: CheckCircle, count: pendingVerificationCount, countColor: 'bg-rose-500' },
     { label: 'Reports & Analytics', path: '/officer/analytics', icon: BarChart3 },

@@ -1,5 +1,4 @@
 import { prisma } from '../lib/prisma.js';
-import { parseComplaintPhotos } from '../lib/photoUtils.js';
 import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
@@ -199,16 +198,46 @@ export async function updateProgress(req, res, next) {
   try {
     const order = await ownedWorkOrder(req.params.id, req.user.id);
     if (!order) return res.status(404).json({ success: false, error: { message: 'Assigned work order not found.' } });
-    const { progress, progressNotes, estimatedCompletionDate, blockers = [], notifyOfficer = true } = req.body;
+    if (!['ASSIGNED', 'ACCEPTED', 'IN_PROGRESS', 'REWORK_REQUIRED'].includes(order.status)) return res.status(409).json({ success: false, error: { message: 'Progress cannot be changed while this work order is awaiting verification or complete.' } });
+    const { progress, progressNotes, estimatedCompletionDate, blockers = [], notifyOfficer: shouldNotifyOfficer = true } = req.body;
     const value = Number(progress);
     if (!Number.isInteger(value) || value < 0 || value > 100) return res.status(422).json({ success: false, error: { message: 'Progress must be between 0 and 100.' } });
     const notes = [progressNotes?.trim(), blockers.length ? `Blockers: ${blockers.join('; ')}` : ''].filter(Boolean).join('\n');
     const updated = await prisma.$transaction(async (tx) => {
-      const data = { progress: value, status: order.status === 'ASSIGNED' ? 'IN_PROGRESS' : order.status };
+      const data = { progress: value, status: ['ASSIGNED', 'REWORK_REQUIRED'].includes(order.status) ? 'IN_PROGRESS' : order.status };
       if (estimatedCompletionDate && Number.isFinite(new Date(estimatedCompletionDate).getTime())) data.deadline = new Date(estimatedCompletionDate);
       const record = await tx.workOrder.update({ where: { id: order.id }, data });
       const history = await tx.workOrderStatusHistory.create({ data: { workOrderId: order.id, previousStatus: order.status, newStatus: record.status, notes: notes || `Progress updated to ${value}%.`, changedByUserId: req.user.id, changedByName: req.user.name } });
-      if (notifyOfficer) await notifyOfficer(tx, order, 'Field work progress updated', `${req.user.name} updated ${order.workOrderCode || order.id} to ${value}%.${notes ? ` ${notes}` : ''}`, `work-progress:${history.id}`);
+      await tx.complaintStatusHistory.create({ data: {
+        complaintId: order.complaintId, previousStatus: order.complaint.status, newStatus: order.complaint.status,
+        title: 'Work progress updated', notes: `${value}% complete.${notes ? ` ${notes}` : ''}`,
+        performedByUserId: req.user.id, performedByName: req.user.name,
+      } });
+      if (shouldNotifyOfficer) await notifyOfficer(tx, order, 'Field work progress updated', `${req.user.name} updated ${order.workOrderCode || order.id} to ${value}%.${notes ? ` ${notes}` : ''}`, `work-progress:${history.id}`);
+      if (['ASSIGNED', 'REWORK_REQUIRED'].includes(order.status)) {
+        await tx.complaint.update({ where: { id: order.complaintId }, data: { status: 'IN_PROGRESS', assignedOfficerId: order.assignedByOfficerId } });
+        await tx.complaintStatusHistory.create({ data: {
+          complaintId: order.complaintId, previousStatus: order.complaint.status, newStatus: 'IN_PROGRESS',
+          title: 'Field work started', notes: notes || `Field Supervisor ${req.user.name} started the assigned work.`,
+          performedByUserId: req.user.id, performedByName: req.user.name,
+        } });
+        await notifyUser(tx, {
+          userId: order.complaint.user.id, role: 'CITIZEN', type: 'WORK_ORDER', title: 'Work started',
+          message: `Field work has started on complaint ${order.complaint.complaintCode || order.complaintId}.`,
+          complaintId: order.complaintId, workOrderId: order.id,
+          relatedEntityType: 'COMPLAINT', relatedEntityId: order.complaintId,
+          targetUrl: `/citizen/complaints/${encodeURIComponent(order.complaint.complaintCode || order.complaintId)}`,
+          eventKey: `work-started:${order.id}`,
+        });
+      }
+      if (notes || value !== order.progress) await notifyUser(tx, {
+        userId: order.complaint.user.id, role: 'CITIZEN', type: 'WORK_ORDER', title: 'Work progress updated',
+        message: `Work on complaint ${order.complaint.complaintCode || order.complaintId} is ${value}% complete.${notes ? ` ${notes}` : ''}`,
+        complaintId: order.complaintId, workOrderId: order.id,
+        relatedEntityType: 'COMPLAINT', relatedEntityId: order.complaintId,
+        targetUrl: `/citizen/complaints/${encodeURIComponent(order.complaint.complaintCode || order.complaintId)}`,
+        eventKey: `work-progress-citizen:${history.id}`,
+      });
       return tx.workOrder.findUnique({ where: { id: order.id }, include: workOrderInclude });
     });
     res.json({ success: true, data: updated });
@@ -331,29 +360,6 @@ export async function submitMaterialRequisition(req, res, next) {
       return record;
     });
     res.status(201).json({ success: true, data: request });
-  } catch (error) { next(error); }
-}
-
-export async function submitPhotoEvidence(req, res, next) {
-  try {
-    const { workOrderId, beforePhotos = [], afterPhotos, repairNotes } = req.body;
-    const order = await ownedWorkOrder(workOrderId, req.user.id);
-    if (!order) return res.status(404).json({ success: false, error: { message: 'Assigned work order not found.' } });
-    const photos = parseComplaintPhotos(afterPhotos);
-    const before = parseComplaintPhotos(beforePhotos);
-    if (!photos.length || !repairNotes?.trim()) return res.status(422).json({ success: false, error: { message: 'Upload at least one completion photo and add repair notes.' } });
-    const result = await prisma.$transaction(async (tx) => {
-      await tx.workOrderPhoto.createMany({ data: [
-        ...before.map((photo) => ({ workOrderId: order.id, uploadedByUserId: req.user.id, imageUrl: photo.imageUrl, photoType: 'BEFORE' })),
-        ...photos.map((photo) => ({ workOrderId: order.id, uploadedByUserId: req.user.id, imageUrl: photo.imageUrl, photoType: 'AFTER', caption: repairNotes.trim() })),
-      ] });
-      const updated = await tx.workOrder.update({ where: { id: order.id }, data: { status: 'AWAITING_VERIFICATION', progress: 100, completedDate: new Date(), afterPhotoUrl: photos[0].imageUrl } });
-      const verification = await tx.repairVerification.create({ data: { complaintId: order.complaintId, workOrderId: order.id, submittedBySupervisorId: req.user.id, supervisorName: req.user.name, completionDetails: repairNotes.trim(), beforePhotoUrl: order.complaint.photos[0]?.imageUrl || null, completionPhotoUrl: photos[0].imageUrl, status: 'AWAITING_VERIFICATION' } });
-      await tx.workOrderStatusHistory.create({ data: { workOrderId: order.id, previousStatus: order.status, newStatus: 'AWAITING_VERIFICATION', notes: repairNotes.trim(), changedByUserId: req.user.id, changedByName: req.user.name } });
-      await notifyOfficer(tx, order, 'Work completion awaits verification', `${req.user.name} submitted completion evidence for ${order.workOrderCode || order.id}.`, `repair-verification-submitted:${verification.id}`);
-      return updated;
-    });
-    res.status(201).json({ success: true, data: result });
   } catch (error) { next(error); }
 }
 
