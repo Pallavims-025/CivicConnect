@@ -413,6 +413,12 @@ model WorkOrderPhoto {
   uploadedByUserId String?            @map("uploaded_by_user_id") @db.VarChar(36)
   imageUrl         String             @map("image_url") @db.MediumText
   photoType        WorkOrderPhotoType @default(COMPLETION) @map("photo_type")
+  captureLatitude  Float?             @map("capture_latitude") @db.Double
+  captureLongitude Float?             @map("capture_longitude") @db.Double
+  locationExtractionMethod String?     @map("location_extraction_method") @db.VarChar(10)
+  locationVerificationStatus PhotoLocationVerificationStatus @default(GPS_COORDINATES_NOT_FOUND) @map("location_verification_status")
+  locationDistanceMetres Float?        @map("location_distance_metres") @db.Double
+  locationVerifiedAt DateTime?         @map("location_verified_at")
   caption          String?            @db.VarChar(255)
   createdAt        DateTime           @default(now()) @map("created_at")
 
@@ -421,6 +427,7 @@ model WorkOrderPhoto {
 
   @@index([workOrderId, photoType])
   @@index([uploadedByUserId])
+  @@index([locationVerificationStatus])
   @@map("work_order_photos")
 }
 
@@ -596,6 +603,12 @@ model RepairVerification {
   completionDetails        String             @map("completion_details") @db.Text
   beforePhotoUrl           String?            @map("before_photo_url") @db.MediumText
   completionPhotoUrl       String             @map("completion_photo_url") @db.MediumText
+  captureLatitude          Float?             @map("capture_latitude") @db.Double
+  captureLongitude         Float?             @map("capture_longitude") @db.Double
+  locationExtractionMethod String?            @map("location_extraction_method") @db.VarChar(10)
+  locationVerificationStatus PhotoLocationVerificationStatus @default(GPS_COORDINATES_NOT_FOUND) @map("location_verification_status")
+  locationDistanceMetres   Float?             @map("location_distance_metres") @db.Double
+  locationVerifiedAt       DateTime?          @map("location_verified_at")
   status                   VerificationStatus @default(AWAITING_VERIFICATION)
   verifiedByOfficerId      String?            @map("verified_by_officer_id") @db.VarChar(36)
   officerRemarks           String?            @map("officer_remarks") @db.Text
@@ -615,6 +628,7 @@ model RepairVerification {
   @@index([status])
   @@index([submittedBySupervisorId])
   @@index([verifiedByOfficerId])
+  @@index([locationVerificationStatus])
   @@map("repair_verifications")
 }
 

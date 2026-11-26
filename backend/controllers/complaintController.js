@@ -4,8 +4,17 @@ import { findDuplicateCandidates, refreshDuplicateCandidates } from '../lib/dupl
 import { notifyDepartmentOfficers, notifyUser } from '../lib/notificationService.js';
 import { DEFAULT_PHOTO_LOCATION_THRESHOLD_METRES } from '../../shared/photoLocation.js';
 import { canCitizenRetryPhotoVerification, hasVerifiedComplaintPhoto, VERIFIED_COMPLAINT_WHERE } from '../lib/verifiedComplaint.js';
+import { officerComplaintAccessWhere } from '../lib/officerComplaintAccess.js';
 
 const PHOTO_LOCATION_THRESHOLD_METRES = DEFAULT_PHOTO_LOCATION_THRESHOLD_METRES;
+
+async function nextComplaintCode(tx) {
+  const rows = await tx.$queryRaw`SELECT next_value AS nextValue FROM complaint_code_sequence WHERE id = 1 FOR UPDATE`;
+  if (!rows.length) throw new Error('Complaint ID sequence is not initialized. Apply the pending database migration.');
+  const nextValue = Number(rows[0].nextValue) + 1;
+  await tx.$executeRaw`UPDATE complaint_code_sequence SET next_value = ${nextValue} WHERE id = 1`;
+  return `CC-${nextValue}`;
+}
 
 const complaintInclude = {
   category: { select: { id: true, name: true } },
@@ -25,6 +34,7 @@ const complaintInclude = {
       assignedByOfficer: { select: { id: true, name: true } },
       statusHistory: { orderBy: { createdAt: 'asc' } },
       photos: { select: { id: true, imageUrl: true, caption: true, createdAt: true } },
+      repairVerifications: { orderBy: { submittedAt: 'desc' }, take: 1 },
     },
     orderBy: { createdAt: 'desc' },
     take: 1,
@@ -33,12 +43,11 @@ const complaintInclude = {
 };
 
 const complaintListInclude = { ...complaintInclude };
-delete complaintListInclude.workOrders;
 complaintListInclude.photos = {
   ...complaintInclude.photos,
-  where: { photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' },
+  where: { photoType: 'INITIAL_EVIDENCE' },
 };
-complaintListInclude._count = { select: { photos: { where: { photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' } } } };
+complaintListInclude._count = { select: { photos: { where: { photoType: 'INITIAL_EVIDENCE' } } } };
 
 function toMapRecord(record) {
   const photosByUrl = new Map();
@@ -109,6 +118,7 @@ function toMapRecord(record) {
       assignedByOfficer: order.assignedByOfficer,
       history: order.statusHistory?.map((entry) => ({ status: entry.newStatus, notes: entry.notes, by: entry.changedByName, date: entry.createdAt })) || [],
       completionPhotos: [...new Set((order.photos || []).map((photo) => photo.imageUrl.trim()))],
+      repairVerification: order.repairVerifications?.[0] || null,
     })),
     duplicateMatches: (record.duplicateMatches || []).map((match) => ({
       id: match.id,
@@ -285,6 +295,7 @@ export async function createComplaint(req, res, next) {
     const record = await prisma.$transaction(async (tx) => {
       const created = await tx.complaint.create({
         data: {
+          complaintCode: await nextComplaintCode(tx),
           title: title.trim(),
           description: description.trim(),
           address: address.trim().slice(0, 500),
@@ -323,6 +334,10 @@ export async function createComplaint(req, res, next) {
         });
       }
       const complaintLabel = created.complaintCode || created.id;
+      if (municipalEligible) await tx.complaintStatusHistory.createMany({ data: [
+        { complaintId: created.id, previousStatus: created.status, newStatus: created.status, title: 'Photo and location verified', notes: 'The backend verified complaint photo coordinates within 500 metres of the confirmed location.', performedByName: 'Verification service' },
+        { complaintId: created.id, previousStatus: created.status, newStatus: created.status, title: 'Complaint received by municipality', notes: 'The verified complaint is available for municipal review.', performedByName: 'Verification service' },
+      ] });
       await notifyUser(tx, {
         userId: req.user.id, role: 'CITIZEN', type: 'COMPLAINT',
         title: 'Complaint submitted', message: `Your complaint ${complaintLabel} was submitted successfully.`,
@@ -376,7 +391,7 @@ export async function reviewComplaintPhotoLocation(req, res, next) {
     }
 
     const complaint = await prisma.complaint.findFirst({
-      where: { AND: [{ OR: [{ id: req.params.id }, { complaintCode: req.params.id }] }, VERIFIED_COMPLAINT_WHERE] },
+      where: { AND: [{ OR: [{ id: req.params.id }, { complaintCode: req.params.id }] }, officerComplaintAccessWhere(req.user)] },
       select: { id: true, complaintCode: true },
     });
     if (!complaint) return res.status(404).json({ success: false, errors: { general: 'Complaint not found.' } });
@@ -426,7 +441,7 @@ export async function reviewComplaintPhotoLocation(req, res, next) {
 export async function listOfficerComplaints(req, res, next) {
   try {
     const records = await prisma.complaint.findMany({
-      where: VERIFIED_COMPLAINT_WHERE,
+      where: officerComplaintAccessWhere(req.user),
       include: complaintListInclude,
       orderBy: { createdAt: 'desc' },
     });
@@ -439,11 +454,11 @@ export async function listOfficerComplaints(req, res, next) {
 export async function getOfficerComplaint(req, res, next) {
   try {
     const record = await prisma.complaint.findFirst({
-      where: { AND: [{ OR: [{ id: req.params.id }, { complaintCode: req.params.id }] }, VERIFIED_COMPLAINT_WHERE] },
+      where: { AND: [{ OR: [{ id: req.params.id }, { complaintCode: req.params.id }] }, officerComplaintAccessWhere(req.user)] },
       include: { ...complaintInclude, duplicateOf: { select: { id: true, complaintCode: true, title: true, photos: { where: { photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' }, select: { photoType: true, locationVerificationStatus: true } } } }, duplicateMatches: { include: { matchedComplaint: { include: complaintInclude } }, orderBy: { similarityScore: 'desc' } } },
     });
     if (!record) return res.status(404).json({ success: false, errors: { general: 'Complaint not found.' } });
-    return res.json({ success: true, data: toMunicipalMapRecord(record) });
+    return res.json({ success: true, data: toMapRecord(record) });
   } catch (error) {
     next(error);
   }
@@ -451,13 +466,14 @@ export async function getOfficerComplaint(req, res, next) {
 
 export async function listDuplicateReviews(req, res, next) {
   try {
-    const totalComplaints = await prisma.complaint.count({ where: VERIFIED_COMPLAINT_WHERE });
+    const scopedVerifiedComplaints = { AND: [VERIFIED_COMPLAINT_WHERE, officerComplaintAccessWhere(req.user)] };
+    const totalComplaints = await prisma.complaint.count({ where: scopedVerifiedComplaints });
     if (totalComplaints > 1) await refreshDuplicateCandidates(prisma);
     const matches = await prisma.duplicateComplaintMatch.findMany({
       where: {
         decision: { in: ['PENDING', 'KEEP_REVIEWING'] },
-        complaint: VERIFIED_COMPLAINT_WHERE,
-        matchedComplaint: VERIFIED_COMPLAINT_WHERE,
+        complaint: scopedVerifiedComplaints,
+        matchedComplaint: scopedVerifiedComplaints,
       },
       include: {
         complaint: { include: complaintInclude },
@@ -488,8 +504,8 @@ export async function reviewDuplicateMatch(req, res, next) {
     const match = await prisma.duplicateComplaintMatch.findFirst({
       where: {
         id: req.params.matchId,
-        complaint: VERIFIED_COMPLAINT_WHERE,
-        matchedComplaint: VERIFIED_COMPLAINT_WHERE,
+        complaint: { AND: [VERIFIED_COMPLAINT_WHERE, officerComplaintAccessWhere(req.user)] },
+        matchedComplaint: { AND: [VERIFIED_COMPLAINT_WHERE, officerComplaintAccessWhere(req.user)] },
       },
     });
     if (!match) return res.status(404).json({ success: false, errors: { general: 'Duplicate match not found.' } });
@@ -572,11 +588,11 @@ export async function listOfficerMapComplaints(req, res, next) {
   try {
     const [records, unmappedCount] = await Promise.all([
       prisma.complaint.findMany({
-        where: { AND: [VERIFIED_COMPLAINT_WHERE, { latitude: { not: null }, longitude: { not: null } }] },
+        where: { AND: [VERIFIED_COMPLAINT_WHERE, officerComplaintAccessWhere(req.user), { latitude: { not: null }, longitude: { not: null } }] },
         include: complaintInclude,
         orderBy: { createdAt: 'desc' },
       }),
-      prisma.complaint.count({ where: { AND: [VERIFIED_COMPLAINT_WHERE, { OR: [{ latitude: null }, { longitude: null }] }] } }),
+      prisma.complaint.count({ where: { AND: [VERIFIED_COMPLAINT_WHERE, officerComplaintAccessWhere(req.user), { OR: [{ latitude: null }, { longitude: null }] }] } }),
     ]);
     res.json({ success: true, data: { complaints: records.map(toMunicipalMapRecord), unmappedCount } });
   } catch (error) {
@@ -597,16 +613,19 @@ export async function updateComplaintStatus(req, res, next) {
     }
 
     const current = await prisma.complaint.findFirst({
-      where: { AND: [{ OR: [{ id: req.params.id }, { complaintCode: req.params.id }] }, VERIFIED_COMPLAINT_WHERE] },
-      select: { id: true, status: true, userId: true, complaintCode: true, assignedOfficerId: true },
+      where: { AND: [{ OR: [{ id: req.params.id }, { complaintCode: req.params.id }] }, officerComplaintAccessWhere(req.user)] },
+      select: {
+        id: true, status: true, userId: true, complaintCode: true, assignedOfficerId: true,
+        photos: { where: { photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' }, select: { id: true }, take: 1 },
+      },
     });
     if (!current) return res.status(404).json({ success: false, errors: { general: 'Complaint not found.' } });
+    if (current.status === 'REJECTED') return res.status(409).json({ success: false, errors: { general: 'Rejected complaints are retained for history and cannot be changed.' } });
+    if (status !== 'REJECTED' && !current.photos.length) {
+      return res.status(409).json({ success: false, errors: { general: 'This complaint needs a verified initial photograph before its status can advance.' } });
+    }
     if (status === 'RESOLVED') {
-      const activeAssignment = await prisma.workOrder.findFirst({
-        where: { complaintId: current.id, status: { in: ['ASSIGNED', 'ACCEPTED', 'IN_PROGRESS', 'AWAITING_VERIFICATION', 'REWORK_REQUIRED'] } },
-        select: { id: true },
-      });
-      if (activeAssignment) return res.status(409).json({ success: false, errors: { general: 'This complaint can be resolved after a Field Supervisor submits completion and a Municipal Officer verifies it.' } });
+      return res.status(409).json({ success: false, errors: { general: 'Final completion must be approved through Municipal Repair Verification.' } });
     }
 
     const normalizedRemarks = typeof remarks === 'string' ? remarks.trim() : '';
@@ -665,7 +684,7 @@ export async function updateComplaintStatus(req, res, next) {
       return tx.complaint.findUnique({ where: { id: current.id }, include: complaintInclude });
     });
 
-    return res.json({ success: true, data: toMunicipalMapRecord(record) });
+    return res.json({ success: true, data: toMapRecord(record) });
   } catch (error) {
     next(error);
   }

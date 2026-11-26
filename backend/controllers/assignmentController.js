@@ -1,7 +1,9 @@
 import { prisma } from '../lib/prisma.js';
-import { parseComplaintPhotos } from '../lib/photoUtils.js';
+import { parseComplaintPhotos, parseComplaintSubmissionPhotos } from '../lib/photoUtils.js';
 import { notifyUser, notifyDepartmentOfficers } from '../lib/notificationService.js';
-import { assertComplaintHasVerifiedPhoto, VERIFIED_COMPLAINT_WHERE, VERIFIED_WORK_ORDER_WHERE } from '../lib/verifiedComplaint.js';
+import { VERIFIED_COMPLAINT_WHERE, VERIFIED_WORK_ORDER_WHERE } from '../lib/verifiedComplaint.js';
+import { DEFAULT_PHOTO_LOCATION_THRESHOLD_METRES } from '../../shared/photoLocation.js';
+import { officerComplaintAccessWhere } from '../lib/officerComplaintAccess.js';
 
 const ACTIVE_WORK_ORDER_STATUSES = ['ASSIGNED', 'ACCEPTED', 'IN_PROGRESS', 'AWAITING_VERIFICATION', 'REWORK_REQUIRED'];
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
@@ -38,6 +40,19 @@ async function notify(tx, { userId = null, targetRole = 'ALL', type, title, mess
     eventKey: `${title}:${workOrderId || complaintId}:${Date.now()}`,
   });
 }
+async function notifyWorkOrderParties(tx, assignment, { title, message, eventKey }) {
+  const label = assignment.complaint.complaintCode || assignment.complaintId;
+  const shared = { type: 'REPAIR_VERIFICATION', title, message, complaintId: assignment.complaintId, workOrderId: assignment.id };
+  if (assignment.assignedByOfficerId) await notifyUser(tx, {
+    ...shared, userId: assignment.assignedByOfficerId, role: 'OFFICER',
+    relatedEntityType: 'WORK_ORDER', relatedEntityId: assignment.id, targetUrl: '/officer/verifications', eventKey,
+  });
+  await notifyUser(tx, {
+    ...shared, userId: assignment.complaint.userId, role: 'CITIZEN',
+    message, relatedEntityType: 'COMPLAINT', relatedEntityId: assignment.complaintId,
+    targetUrl: `/citizen/complaints/${encodeURIComponent(label)}`, eventKey: `${eventKey}:citizen`,
+  });
+}
 
 export async function listActiveSupervisors(req, res, next) {
   try {
@@ -57,6 +72,10 @@ export async function assignComplaint(req, res, next) {
       return res.status(422).json({ success: false, errors: { instructions: 'Enter assignment instructions between 5 and 5,000 characters.' } });
     }
     if (!PRIORITIES.includes(priority)) return res.status(422).json({ success: false, errors: { priority: 'Choose a supported priority.' } });
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.complaintId)) {
+      return res.status(400).json({ success: false, errors: { complaintId: 'A valid internal complaint ID is required for assignment.' } });
+    }
+
     const supervisor = await prisma.user.findFirst({
       where: { ...ELIGIBLE_SUPERVISOR_WHERE, id: supervisorId },
       select: { id: true, name: true, departmentId: true },
@@ -64,10 +83,27 @@ export async function assignComplaint(req, res, next) {
     if (!supervisor) return res.status(422).json({ success: false, errors: { supervisorId: 'Select an active, approved Field Supervisor.' } });
 
     const complaint = await prisma.complaint.findFirst({
-      where: { AND: [{ OR: [{ id: req.params.complaintId }, { complaintCode: req.params.complaintId }] }, VERIFIED_COMPLAINT_WHERE] },
-      include: { category: { select: { departmentId: true } } },
+      where: { AND: [{ id: req.params.complaintId }, { status: { not: 'REJECTED' } }, officerComplaintAccessWhere(req.user)] },
+      include: {
+        category: { select: { departmentId: true } },
+        photos: {
+          where: { photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' },
+          select: { id: true, photoType: true, locationVerificationStatus: true },
+          take: 1,
+        },
+      },
     });
     if (!complaint) return res.status(404).json({ success: false, errors: { general: 'Complaint not found.' } });
+    if (!complaint.photos.length) {
+      return res.status(409).json({
+        success: false,
+        errors: { general: 'This complaint cannot be assigned until at least one initial photograph is verified against its location.' },
+      });
+    }
+    const complaintDepartmentId = complaint.departmentId || complaint.category.departmentId;
+    if (complaintDepartmentId && supervisor.departmentId && complaintDepartmentId !== supervisor.departmentId) {
+      return res.status(422).json({ success: false, errors: { supervisorId: 'Select a Field Supervisor from the complaint department.' } });
+    }
     if (['RESOLVED', 'REJECTED'].includes(complaint.status)) {
       return res.status(409).json({ success: false, errors: { general: 'Resolved or rejected complaints cannot receive new work assignments.' } });
     }
@@ -93,11 +129,13 @@ export async function assignComplaint(req, res, next) {
 
     const assignment = await prisma.$transaction(async (tx) => {
       const stillEligible = await tx.complaint.findFirst({
-        where: { AND: [{ id: complaint.id }, VERIFIED_COMPLAINT_WHERE] },
+        where: { AND: [{ id: complaint.id, status: { not: 'REJECTED' } }, officerComplaintAccessWhere(req.user)] },
         select: { id: true, status: true, photos: { where: { photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' }, select: { id: true, locationVerificationStatus: true, photoType: true }, take: 1 } },
       });
       if (!stillEligible) throw Object.assign(new Error('Complaint not found.'), { status: 404 });
-      assertComplaintHasVerifiedPhoto(stillEligible);
+      if (!stillEligible.photos.length) {
+        throw Object.assign(new Error('This complaint cannot be assigned until at least one initial photograph is verified against its location.'), { status: 409 });
+      }
       const existing = await tx.workOrder.findFirst({
         where: { complaintId: complaint.id, status: { in: ACTIVE_WORK_ORDER_STATUSES }, ...VERIFIED_WORK_ORDER_WHERE },
         orderBy: { createdAt: 'desc' },
@@ -201,7 +239,7 @@ export async function listMyAssignments(req, res, next) {
 export async function listOfficerAssignments(req, res, next) {
   try {
     const assignments = await prisma.workOrder.findMany({
-      where: { assignedByOfficerId: req.user.id, ...VERIFIED_WORK_ORDER_WHERE },
+      where: { assignedByOfficerId: req.user.id },
       include: workOrderInclude,
       orderBy: [{ status: 'asc' }, { deadline: 'asc' }],
     });
@@ -298,6 +336,10 @@ export async function updateAssignmentStatus(req, res, next) {
       return res.status(409).json({ success: false, errors: { general: 'This assignment is no longer active.' } });
     }
     if (assignment.status === 'AWAITING_VERIFICATION') return res.status(409).json({ success: false, errors: { general: 'This assignment is awaiting municipal verification.' } });
+    if ((status === 'ACCEPTED' && assignment.status !== 'ASSIGNED')
+      || (status === 'IN_PROGRESS' && !['ASSIGNED', 'ACCEPTED', 'REWORK_REQUIRED'].includes(assignment.status))) {
+      return res.status(409).json({ success: false, errors: { status: 'This status change is not valid for the current work order.' } });
+    }
 
     const record = await prisma.$transaction(async (tx) => {
       const updated = await tx.workOrder.update({
@@ -337,15 +379,6 @@ export async function updateAssignmentStatus(req, res, next) {
         complaintId: assignment.complaintId,
         workOrderId: assignment.id,
       });
-      await notifyUser(tx, {
-        userId: assignment.complaint.userId, role: 'CITIZEN', type: 'REPAIR_VERIFICATION',
-        title: 'Repair work completed',
-        message: `Field work on complaint ${assignment.complaint.complaintCode || assignment.complaintId} is complete and awaiting municipal verification.`,
-        complaintId: assignment.complaintId, workOrderId: assignment.id,
-        relatedEntityType: 'COMPLAINT', relatedEntityId: assignment.complaintId,
-        targetUrl: `/citizen/complaints/${encodeURIComponent(assignment.complaint.complaintCode || assignment.complaintId)}`,
-        eventKey: `repair-submitted:${assignment.id}`,
-      });
       return tx.workOrder.findUnique({ where: { id: updated.id }, include: workOrderInclude });
     });
     res.json({ success: true, data: record });
@@ -358,29 +391,66 @@ export async function completeAssignment(req, res, next) {
     if (typeof remarks !== 'string' || remarks.trim().length < 5 || remarks.length > 5000) {
       return res.status(422).json({ success: false, errors: { remarks: 'Completion remarks are required (5 to 5,000 characters).' } });
     }
-    const completionPhotos = parseComplaintPhotos(photos);
-    if (!completionPhotos.length) return res.status(422).json({ success: false, errors: { photos: 'Upload at least one completion photograph.' } });
     const assignment = await prisma.workOrder.findFirst({ where: { id: req.params.id, supervisorId: req.user.id, ...VERIFIED_WORK_ORDER_WHERE }, include: { complaint: { include: { photos: { where: { photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' }, take: 1, select: { imageUrl: true } } } } } });
     if (!assignment) return res.status(404).json({ success: false, errors: { general: 'Assignment not found for this supervisor.' } });
     if (!['IN_PROGRESS', 'REWORK_REQUIRED'].includes(assignment.status)) {
       return res.status(409).json({ success: false, errors: { general: 'Start or resume this assignment before submitting completion.' } });
     }
+    const parsed = await parseComplaintSubmissionPhotos(photos, assignment.complaint, DEFAULT_PHOTO_LOCATION_THRESHOLD_METRES);
+    if (parsed.error || !parsed.records.length) return res.status(422).json({ success: false, errors: { photos: parsed.error || 'Upload at least one completion photograph.' } });
+    const verifiedPhotos = parsed.records;
+    const failedPhoto = verifiedPhotos.find((photo) => photo.locationVerificationStatus !== 'VERIFIED');
+    if (failedPhoto) {
+      const reason = failedPhoto.locationVerificationStatus;
+      const message = reason === 'REJECTED_LOCATION_MISMATCH'
+        ? `A repaired photo is ${failedPhoto.locationDistanceMetres} metres from the confirmed complaint location, beyond the 500 metre limit.`
+        : reason === 'COMPLAINT_LOCATION_NOT_AVAILABLE'
+          ? 'The original complaint location is unavailable, so the repaired photo cannot be verified.'
+          : 'GPS coordinates could not be extracted from the repaired photo. Include original photo GPS metadata or a readable GPS stamp.';
+      await prisma.$transaction(async (tx) => {
+        await tx.workOrderPhoto.createMany({ data: verifiedPhotos.map((photo) => ({
+          workOrderId: assignment.id, uploadedByUserId: req.user.id, imageUrl: photo.imageUrl,
+          photoType: 'AFTER', caption: message.slice(0, 255), captureLatitude: photo.captureLatitude,
+          captureLongitude: photo.captureLongitude, locationExtractionMethod: photo.locationExtractionMethod,
+          locationVerificationStatus: photo.locationVerificationStatus,
+          locationDistanceMetres: photo.locationDistanceMetres, locationVerifiedAt: photo.locationVerifiedAt,
+        })) });
+        await tx.workOrderStatusHistory.create({ data: {
+          workOrderId: assignment.id, previousStatus: assignment.status, newStatus: assignment.status,
+          notes: `Completion photo rejected: ${message}`, changedByUserId: req.user.id, changedByName: req.user.name,
+        } });
+      });
+      return res.status(422).json({ success: false, errors: { photos: message, verificationStatus: reason } });
+    }
+    const acceptedPhoto = verifiedPhotos[0];
 
     const record = await prisma.$transaction(async (tx) => {
       const now = new Date();
       const updated = await tx.workOrder.update({
         where: { id: assignment.id },
-        data: { status: 'AWAITING_VERIFICATION', progress: 100, completedDate: now, afterPhotoUrl: completionPhotos[0].imageUrl },
+        data: { status: 'AWAITING_VERIFICATION', progress: 100, completedDate: now, afterPhotoUrl: acceptedPhoto.imageUrl },
       });
-      await tx.workOrderPhoto.createMany({ data: completionPhotos.map((photo) => ({ workOrderId: assignment.id, uploadedByUserId: req.user.id, imageUrl: photo.imageUrl })) });
-      await tx.repairVerification.create({ data: {
+      await tx.workOrderPhoto.createMany({ data: verifiedPhotos.map((photo) => ({
+        workOrderId: assignment.id, uploadedByUserId: req.user.id, imageUrl: photo.imageUrl,
+        photoType: 'AFTER', caption: remarks.trim().slice(0, 255), captureLatitude: photo.captureLatitude,
+        captureLongitude: photo.captureLongitude, locationExtractionMethod: photo.locationExtractionMethod,
+        locationVerificationStatus: photo.locationVerificationStatus,
+        locationDistanceMetres: photo.locationDistanceMetres, locationVerifiedAt: photo.locationVerifiedAt,
+      })) });
+      const verification = await tx.repairVerification.create({ data: {
         complaintId: assignment.complaintId,
         workOrderId: assignment.id,
         submittedBySupervisorId: req.user.id,
         supervisorName: req.user.name,
         completionDetails: remarks.trim(),
         beforePhotoUrl: assignment.complaint.photos[0]?.imageUrl || null,
-        completionPhotoUrl: completionPhotos[0].imageUrl,
+        completionPhotoUrl: acceptedPhoto.imageUrl,
+        captureLatitude: acceptedPhoto.captureLatitude,
+        captureLongitude: acceptedPhoto.captureLongitude,
+        locationExtractionMethod: acceptedPhoto.locationExtractionMethod,
+        locationVerificationStatus: acceptedPhoto.locationVerificationStatus,
+        locationDistanceMetres: acceptedPhoto.locationDistanceMetres,
+        locationVerifiedAt: acceptedPhoto.locationVerifiedAt,
         status: 'AWAITING_VERIFICATION',
       } });
       await tx.workOrderStatusHistory.create({
@@ -396,33 +466,10 @@ export async function completeAssignment(req, res, next) {
         performedByUserId: req.user.id,
         performedByName: req.user.name,
       } });
-      await notify(tx, {
-        userId: assignment.assignedByOfficerId,
-        targetRole: 'OFFICER',
-        type: 'REPAIR_VERIFICATION',
-        title: 'Work completion awaits verification',
-        message: `${req.user.name} submitted completion evidence for ${assignment.workOrderCode || assignment.id}.`,
-        complaintId: assignment.complaintId,
-        workOrderId: assignment.id,
-      });
-      await notifyUser(tx, {
-        userId: verification.workOrder.complaint.userId, role: 'CITIZEN', type: 'REPAIR_VERIFICATION',
-        title: approved ? 'Repair verification approved' : 'Repair verification rejected',
-        message: approved
-          ? `The repair for complaint ${verification.workOrder.complaint.complaintCode || verification.complaintId} was approved. ${remarks.trim()}`
-          : `The repair for complaint ${verification.workOrder.complaint.complaintCode || verification.complaintId} needs more work. ${remarks.trim()}`,
-        complaintId: verification.complaintId, workOrderId: verification.workOrderId,
-        relatedEntityType: 'COMPLAINT', relatedEntityId: verification.complaintId,
-        targetUrl: `/citizen/complaints/${encodeURIComponent(verification.workOrder.complaint.complaintCode || verification.complaintId)}`,
-        eventKey: `verification-result:${verification.id}`,
-      });
-      await notifyUser(tx, {
-        userId: req.user.id, role: 'OFFICER', type: 'REPAIR_VERIFICATION',
-        title: approved ? 'Repair verification approved' : 'Repair verification rejected',
-        message: `Your verification decision for complaint ${verification.workOrder.complaint.complaintCode || verification.complaintId} was recorded.`,
-        complaintId: verification.complaintId, workOrderId: verification.workOrderId,
-        relatedEntityType: 'WORK_ORDER', relatedEntityId: verification.workOrderId,
-        targetUrl: '/officer/verifications', eventKey: `verification-officer-result:${verification.id}`,
+      await notifyWorkOrderParties(tx, { ...assignment, complaint: { ...assignment.complaint, userId: assignment.complaint.userId } }, {
+        title: 'Repair evidence submitted',
+        message: `Repair evidence for complaint ${assignment.complaint.complaintCode || assignment.complaintId} passed location verification and is awaiting municipal review.`,
+        eventKey: `repair-submitted:${verification.id}`,
       });
       return tx.workOrder.findUnique({ where: { id: updated.id }, include: workOrderInclude });
     });
@@ -467,6 +514,9 @@ export async function reviewCompletion(req, res, next) {
       return res.status(404).json({ success: false, errors: { general: 'Pending completion verification not found.' } });
     }
     const approved = decision === 'APPROVE';
+    if (approved && verification.locationVerificationStatus !== 'VERIFIED') {
+      return res.status(409).json({ success: false, errors: { general: 'Completion evidence has no successful backend location verification and cannot be approved.' } });
+    }
     const record = await prisma.$transaction(async (tx) => {
       await tx.repairVerification.update({
         where: { id: verification.id },
@@ -490,14 +540,20 @@ export async function reviewCompletion(req, res, next) {
         performedByUserId: req.user.id,
         performedByName: req.user.name,
       } });
-      if (verification.workOrder.supervisorId) await notify(tx, {
-        userId: verification.workOrder.supervisorId,
-        targetRole: 'SUPERVISOR',
-        type: 'REPAIR_VERIFICATION',
+      await notifyWorkOrderParties(tx, verification.workOrder, {
+        title: approved ? 'Repair approved' : 'Repair returned for correction',
+        message: approved
+          ? `The repair for complaint ${verification.workOrder.complaint.complaintCode || verification.complaintId} was approved. ${remarks.trim()}`
+          : `The repair for complaint ${verification.workOrder.complaint.complaintCode || verification.complaintId} needs correction. ${remarks.trim()}`,
+        eventKey: `verification-result:${verification.id}`,
+      });
+      if (verification.workOrder.supervisorId) await notifyUser(tx, {
+        userId: verification.workOrder.supervisorId, role: 'SUPERVISOR', type: 'REPAIR_VERIFICATION',
         title: approved ? 'Repair verified' : 'Rework requested',
         message: `Work order ${verification.workOrder.workOrderCode || verification.workOrderId}: ${remarks.trim()}`,
-        complaintId: verification.complaintId,
-        workOrderId: verification.workOrderId,
+        complaintId: verification.complaintId, workOrderId: verification.workOrderId,
+        relatedEntityType: 'WORK_ORDER', relatedEntityId: verification.workOrderId,
+        targetUrl: '/supervisor/work-orders', eventKey: `verification-supervisor-result:${verification.id}`,
       });
       return tx.repairVerification.findUnique({ where: { id: verification.id }, include: { workOrder: { include: workOrderInclude } } });
     });

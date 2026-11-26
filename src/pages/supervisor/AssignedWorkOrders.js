@@ -58,6 +58,7 @@ export function AssignedWorkOrders() {
     return myWorkOrders.filter((wo) => {
       const matchSearch =
         wo.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (wo.complaintId && wo.complaintId.toLowerCase().includes(searchTerm.toLowerCase())) ||
         wo.complaintTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (wo.location && wo.location.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (wo.category && wo.category.toLowerCase().includes(searchTerm.toLowerCase()));

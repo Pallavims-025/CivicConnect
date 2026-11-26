@@ -1,4 +1,4 @@
-export function isMunicipalComplaintEligible(complaint) {
+export function hasVerifiedInitialComplaintPhoto(complaint) {
   return complaint?.status !== 'REJECTED'
     && Array.isArray(complaint?.photoLocationEvidence)
     && complaint.photoLocationEvidence.some((photo) => (

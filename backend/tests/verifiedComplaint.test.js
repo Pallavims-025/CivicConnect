@@ -9,8 +9,9 @@ import {
 } from '../lib/verifiedComplaint.js';
 import { prisma } from '../lib/prisma.js';
 import { assignComplaint } from '../controllers/assignmentController.js';
-import { listMyComplaints, listOfficerComplaints } from '../controllers/complaintController.js';
-import { isMunicipalComplaintEligible } from '../../src/lib/municipalComplaintEligibility.js';
+import { getOfficerComplaint, listMyComplaints, listOfficerComplaints, updateComplaintStatus } from '../controllers/complaintController.js';
+import { hasVerifiedInitialComplaintPhoto } from '../../src/lib/municipalComplaintEligibility.js';
+import { officerComplaintAccessWhere } from '../lib/officerComplaintAccess.js';
 
 const complaint = (photos = [], status = 'PENDING') => ({ id: 'in-memory-test-record', userId: 'citizen-1', status, photos });
 
@@ -18,28 +19,78 @@ test('a backend VERIFIED photo qualifies a complaint for municipal views', () =>
   assert.equal(hasVerifiedComplaintPhoto(complaint([{ photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' }])), true);
 });
 
-test('the municipal dashboard accepts stored VERIFIED initial evidence and rejects rejected/unverified records', () => {
-  assert.equal(isMunicipalComplaintEligible({ status: 'PENDING', photoLocationEvidence: [{ photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' }] }), true);
-  assert.equal(isMunicipalComplaintEligible({ status: 'REJECTED', photoLocationEvidence: [{ photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' }] }), false);
-  assert.equal(isMunicipalComplaintEligible({ status: 'PENDING', photoLocationEvidence: [{ photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'GPS_COORDINATES_NOT_FOUND' }] }), false);
+test('only verified initial evidence permits assignment', () => {
+  assert.equal(hasVerifiedInitialComplaintPhoto({ status: 'PENDING', photoLocationEvidence: [{ photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' }] }), true);
+  assert.equal(hasVerifiedInitialComplaintPhoto({ status: 'REJECTED', photoLocationEvidence: [{ photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' }] }), false);
+  assert.equal(hasVerifiedInitialComplaintPhoto({ status: 'PENDING', photoLocationEvidence: [{ photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'GPS_COORDINATES_NOT_FOUND' }] }), false);
 });
 
-test('municipal complaint list applies the database eligibility predicate', async () => {
+test('officer access includes assigned work, matching departments, and only unassigned intake records', () => {
+  assert.deepEqual(officerComplaintAccessWhere({ id: 'officer-1', departmentId: 3 }), {
+    OR: [
+      { assignedOfficerId: 'officer-1' },
+      { workOrders: { some: { assignedByOfficerId: 'officer-1' } } },
+      { departmentId: 3 },
+      { category: { departmentId: 3 } },
+      { departmentId: null, assignedOfficerId: null, category: { departmentId: null }, workOrders: { none: {} } },
+    ],
+  });
+});
+
+test('municipal complaint list includes unverified and rejected records in officer scope', async () => {
   const originalLookup = prisma.complaint.findMany;
   let query;
-  const verifiedRecord = {
-    id: 'in-memory-verified-record', complaintCode: 'CC-TEST', title: 'Verified complaint', description: 'A verified complaint fixture', status: 'PENDING', priority: 'MEDIUM',
-    photos: [{ id: 'photo-1', imageUrl: 'photo.jpg', photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' }],
+  const unverifiedRecord = {
+    id: 'in-memory-unverified-record', complaintCode: 'CC-TEST', title: 'Unverified complaint', description: 'An unverified complaint fixture', status: 'PENDING', priority: 'MEDIUM',
+    photos: [{ id: 'photo-1', imageUrl: 'photo.jpg', photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'GPS_COORDINATES_NOT_FOUND' }],
     category: { name: 'Roads' }, department: { name: 'Roads' }, user: { id: 'citizen-1', name: 'Citizen' }, assignedOfficer: null, workOrders: [], statusHistory: [], _count: { photos: 1 },
   };
-  prisma.complaint.findMany = async (args) => { query = args; return [verifiedRecord]; };
+  const rejectedRecord = {
+    ...unverifiedRecord, id: 'in-memory-rejected-record', complaintCode: 'CC-REJECTED', status: 'REJECTED', rejectionReason: 'Outside service area',
+    photos: [], _count: { photos: 0 },
+  };
+  prisma.complaint.findMany = async (args) => { query = args; return [unverifiedRecord, rejectedRecord]; };
   const response = { json(body) { this.body = body; } };
-  try { await listOfficerComplaints({}, response, (error) => { throw error; }); }
+  try { await listOfficerComplaints({ user: { id: 'officer-1', departmentId: null } }, response, (error) => { throw error; }); }
   finally { prisma.complaint.findMany = originalLookup; }
-  assert.deepEqual(query.where, { status: { not: 'REJECTED' }, photos: { some: { photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' } } });
-  assert.deepEqual(query.include.photos.where, { photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' });
+  assert.deepEqual(query.where, officerComplaintAccessWhere({ id: 'officer-1', departmentId: null }));
+  assert.deepEqual(query.include.photos.where, { photoType: 'INITIAL_EVIDENCE' });
   assert.equal(response.body.data.complaints[0].status, 'PENDING');
-  assert.equal(response.body.data.complaints[0].photoLocationEvidence[0].locationVerificationStatus, 'VERIFIED');
+  assert.equal(response.body.data.complaints[0].photoLocationEvidence[0].locationVerificationStatus, 'GPS_COORDINATES_NOT_FOUND');
+  assert.equal(response.body.data.complaints[1].status, 'REJECTED');
+  assert.equal(response.body.data.complaints[1].rejectionReason, 'Outside service area');
+});
+
+test('officer can open a complaint by public ID while retaining its internal UUID', async () => {
+  const originalLookup = prisma.complaint.findFirst;
+  const complaintUuid = 'b937e849-b323-4966-8e17-a7494170000b';
+  let query;
+  prisma.complaint.findFirst = async (args) => {
+    query = args;
+    return {
+      id: complaintUuid, complaintCode: 'CC-1001', title: 'Complaint', description: 'Complaint description',
+      status: 'PENDING', priority: 'MEDIUM', photos: [{ id: 'photo-1', imageUrl: 'photo.jpg', photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'GPS_COORDINATES_NOT_FOUND' }],
+      category: { name: 'Roads' }, department: null, user: { id: 'citizen-1', name: 'Citizen' },
+      assignedOfficer: null, workOrders: [], statusHistory: [],
+    };
+  };
+  const response = {
+    statusCode: 200,
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; },
+  };
+  try {
+    await getOfficerComplaint({
+      params: { id: 'CC-1001' },
+      user: { id: 'officer-1', departmentId: null },
+    }, response, (error) => { throw error; });
+  } finally { prisma.complaint.findFirst = originalLookup; }
+  assert.deepEqual(query.where.AND[0], { OR: [{ id: 'CC-1001' }, { complaintCode: 'CC-1001' }] });
+  assert.deepEqual(query.where.AND[1], officerComplaintAccessWhere({ id: 'officer-1', departmentId: null }));
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.data.id, 'CC-1001');
+  assert.equal(response.body.data.databaseId, complaintUuid);
+  assert.equal(response.body.data.photoLocationEvidence[0].locationVerificationStatus, 'GPS_COORDINATES_NOT_FOUND');
 });
 
 test('citizen complaint retrieval remains scoped to owner and includes rejection reasons', async () => {
@@ -104,12 +155,16 @@ test('direct assignment guard rejects complaints without a backend verified phot
   assert.doesNotThrow(() => assertComplaintHasVerifiedPhoto(complaint([{ photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' }])));
 });
 
-test('direct assignment API hides an unverified complaint before creating a work order', async () => {
+test('direct assignment API uses the internal UUID and reports unverified evidence', async () => {
   const originalSupervisorLookup = prisma.user.findFirst;
   const originalComplaintLookup = prisma.complaint.findFirst;
   let complaintQuery;
+  const complaintUuid = 'b937e849-b323-4966-8e17-a7494170000b';
   prisma.user.findFirst = async () => ({ id: 'supervisor-id', name: 'Supervisor', departmentId: 1 });
-  prisma.complaint.findFirst = async (args) => { complaintQuery = args; return null; };
+  prisma.complaint.findFirst = async (args) => {
+    complaintQuery = args;
+    return { id: 'unverified-complaint-id', status: 'PENDING', photos: [], category: { departmentId: 1 } };
+  };
   const response = {
     statusCode: 200,
     status(code) { this.statusCode = code; return this; },
@@ -118,13 +173,69 @@ test('direct assignment API hides an unverified complaint before creating a work
   try {
     await assignComplaint({
       body: { supervisorId: 'supervisor-id', instructions: 'Inspect this location', priority: 'MEDIUM' },
-      params: { complaintId: 'unverified-complaint-id' },
-      user: { id: 'officer-id', name: 'Officer' },
+      params: { complaintId: complaintUuid },
+      user: { id: 'officer-id', name: 'Officer', departmentId: null },
     }, response, (error) => { throw error; });
   } finally {
     prisma.user.findFirst = originalSupervisorLookup;
     prisma.complaint.findFirst = originalComplaintLookup;
   }
-  assert.equal(response.statusCode, 404);
-  assert.deepEqual(complaintQuery.where.AND[1], { status: { not: 'REJECTED' }, photos: { some: { photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' } } });
+  assert.equal(response.statusCode, 409);
+  assert.match(response.body.errors.general, /cannot be assigned until at least one initial photograph is verified/i);
+  assert.deepEqual(complaintQuery.where.AND[0], { id: complaintUuid });
+  assert.deepEqual(complaintQuery.where.AND[1], { status: { not: 'REJECTED' } });
+  assert.deepEqual(complaintQuery.where.AND[2], officerComplaintAccessWhere({ id: 'officer-id', departmentId: null }));
+  assert.deepEqual(complaintQuery.include.photos.where, { photoType: 'INITIAL_EVIDENCE', locationVerificationStatus: 'VERIFIED' });
+});
+
+test('direct assignment API rejects a public complaint code where an internal UUID is required', async () => {
+  const originalSupervisorLookup = prisma.user.findFirst;
+  const originalComplaintLookup = prisma.complaint.findFirst;
+  prisma.user.findFirst = async () => { throw new Error('Supervisor lookup should not run.'); };
+  prisma.complaint.findFirst = async () => { throw new Error('Complaint lookup should not run.'); };
+  const response = {
+    statusCode: 200,
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; },
+  };
+  try {
+    await assignComplaint({
+      body: { supervisorId: 'supervisor-id', instructions: 'Inspect this location', priority: 'MEDIUM' },
+      params: { complaintId: 'CC-1001' },
+      user: { id: 'officer-id', name: 'Officer', departmentId: null },
+    }, response, (error) => { throw error; });
+  } finally {
+    prisma.user.findFirst = originalSupervisorLookup;
+    prisma.complaint.findFirst = originalComplaintLookup;
+  }
+  assert.equal(response.statusCode, 400);
+  assert.match(response.body.errors.complaintId, /internal complaint ID/i);
+});
+
+test('officer cannot bypass repair verification by setting a complaint to RESOLVED', async () => {
+  const originalLookup = prisma.complaint.findFirst;
+  let query;
+  prisma.complaint.findFirst = async (args) => {
+    query = args;
+    return {
+      id: 'b937e849-b323-4966-8e17-a7494170000b', complaintCode: 'CC-1001',
+      status: 'IN_PROGRESS', userId: 'citizen-1', assignedOfficerId: 'officer-1',
+      photos: [{ id: 'verified-photo' }],
+    };
+  };
+  const response = {
+    statusCode: 200,
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; },
+  };
+  try {
+    await updateComplaintStatus({
+      params: { id: 'CC-1001' },
+      body: { status: 'RESOLVED' },
+      user: { id: 'officer-1', name: 'Officer', departmentId: null },
+    }, response, (error) => { throw error; });
+  } finally { prisma.complaint.findFirst = originalLookup; }
+  assert.deepEqual(query.where.AND[1], officerComplaintAccessWhere({ id: 'officer-1', departmentId: null }));
+  assert.equal(response.statusCode, 409);
+  assert.match(response.body.errors.general, /Municipal Repair Verification/i);
 });

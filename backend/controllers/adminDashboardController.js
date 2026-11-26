@@ -86,6 +86,7 @@ function activityFromStatus(entry) {
     title: entry.title,
     description: entry.notes || `${entry.previousStatus || 'New'} → ${entry.newStatus}`,
     actor: entry.performedByName,
+    actorRole: entry.performedByUser?.role || 'SYSTEM',
     at: entry.createdAt,
     complaintCode: entry.complaint.complaintCode || entry.complaint.id,
   };
@@ -198,7 +199,7 @@ function getMockAdminDashboardData(range = '30_DAYS') {
 export async function getAdminDashboard(req, res, next) {
   const range = ['7_DAYS', '30_DAYS', '90_DAYS', 'YEAR'].includes(req.query.range) ? req.query.range : '30_DAYS';
   try {
-    const [users, complaints, departments, recentUsers, complaintHistory, workOrderHistory, photoEvents] = await Promise.all([
+    const [users, complaints, departments, recentUsers, complaintHistory, workOrderHistory, photoEvents, repairEvents, repairPhotoEvents] = await Promise.all([
       prisma.user.findMany({ select: { id: true, role: true } }),
       prisma.complaint.findMany({
         select: {
@@ -218,15 +219,23 @@ export async function getAdminDashboard(req, res, next) {
       prisma.user.findMany({ take: 12, orderBy: { createdAt: 'desc' }, select: { id: true, name: true, role: true, createdAt: true } }),
       prisma.complaintStatusHistory.findMany({
         take: 20, orderBy: { createdAt: 'desc' },
-        include: { complaint: { select: { id: true, complaintCode: true, title: true } } },
+        include: { complaint: { select: { id: true, complaintCode: true, title: true } }, performedByUser: { select: { role: true } } },
       }),
       prisma.workOrderStatusHistory.findMany({
         take: 20, orderBy: { createdAt: 'desc' },
-        include: { workOrder: { select: { id: true, workOrderCode: true, complaint: { select: { id: true, complaintCode: true, title: true } } } } },
+        include: { workOrder: { select: { id: true, workOrderCode: true, complaint: { select: { id: true, complaintCode: true, title: true } } } }, changedBy: { select: { role: true } } },
       }),
       prisma.complaintPhoto.findMany({
         where: { photoType: 'INITIAL_EVIDENCE' }, take: 20, orderBy: { createdAt: 'desc' },
-        select: { id: true, locationVerificationStatus: true, createdAt: true, complaint: { select: { id: true, complaintCode: true, title: true } } },
+        select: { id: true, locationVerificationStatus: true, createdAt: true, uploadedBy: { select: { role: true } }, complaint: { select: { id: true, complaintCode: true, title: true } } },
+      }),
+      prisma.repairVerification.findMany({
+        take: 20, orderBy: { submittedAt: 'desc' },
+        include: { complaint: { select: { id: true, complaintCode: true, title: true } }, submittedBySupervisor: { select: { name: true } }, verifiedByOfficer: { select: { name: true } } },
+      }),
+      prisma.workOrderPhoto.findMany({
+        where: { photoType: 'AFTER' }, take: 20, orderBy: { createdAt: 'desc' },
+        include: { uploadedBy: { select: { name: true, role: true } }, workOrder: { select: { complaint: { select: { id: true, complaintCode: true, title: true } } } } },
       }),
     ]);
 
@@ -258,7 +267,7 @@ export async function getAdminDashboard(req, res, next) {
       if (complaint.status === 'RESOLVED') item.resolved += 1;
     }
     const activities = [
-      ...recentUsers.map((user) => ({ id: `user:${user.id}`, type: 'USER', title: 'New user registered', description: `${user.name} joined as ${user.role.toLowerCase().replaceAll('_', ' ')}.`, actor: user.name, at: user.createdAt })),
+      ...recentUsers.map((user) => ({ id: `user:${user.id}`, type: 'USER', title: 'New user registered', description: `${user.name} joined as ${user.role.toLowerCase().replaceAll('_', ' ')}.`, actor: user.name, actorRole: user.role, at: user.createdAt })),
       ...complaintHistory.map(activityFromStatus),
       ...workOrderHistory.map((entry) => ({
         id: `work-order-status:${entry.id}`,
@@ -266,6 +275,7 @@ export async function getAdminDashboard(req, res, next) {
         title: `Work order ${entry.newStatus.toLowerCase().replaceAll('_', ' ')}`,
         description: `${entry.workOrder.complaint.complaintCode || entry.workOrder.complaint.id} · ${entry.workOrder.complaint.title}${entry.notes ? ` — ${entry.notes}` : ''}`,
         actor: entry.changedByName,
+        actorRole: entry.changedBy?.role || 'SYSTEM',
         at: entry.createdAt,
         complaintCode: entry.workOrder.complaint.complaintCode || entry.workOrder.complaint.id,
         workOrderCode: entry.workOrder.workOrderCode || entry.workOrder.id,
@@ -276,8 +286,29 @@ export async function getAdminDashboard(req, res, next) {
         title: `Complaint photo ${photo.locationVerificationStatus.toLowerCase().replaceAll('_', ' ')}`,
         description: `${photo.complaint.complaintCode || photo.complaint.id} · ${photo.complaint.title}`,
         actor: 'Verification service',
+        actorRole: photo.uploadedBy?.role || 'SYSTEM',
         at: photo.createdAt,
         complaintCode: photo.complaint.complaintCode || photo.complaint.id,
+      })),
+      ...repairEvents.map((entry) => ({
+        id: `repair-evidence:${entry.id}`,
+        type: 'REPAIR_VERIFICATION',
+        title: `Repair evidence ${entry.locationVerificationStatus.toLowerCase().replaceAll('_', ' ')}`,
+        description: `${entry.complaint.complaintCode || entry.complaint.id} · ${entry.complaint.title}${Number.isFinite(entry.locationDistanceMetres) ? ` · ${entry.locationDistanceMetres.toFixed(1)} m from complaint location` : ''}`,
+        actor: entry.verifiedByOfficer?.name || entry.submittedBySupervisor?.name || 'Verification service',
+        actorRole: entry.verifiedByOfficer ? 'OFFICER' : entry.submittedBySupervisor ? 'SUPERVISOR' : 'SYSTEM',
+        at: entry.verifiedAt || entry.submittedAt,
+        complaintCode: entry.complaint.complaintCode || entry.complaint.id,
+      })),
+      ...repairPhotoEvents.map((photo) => ({
+        id: `repair-photo:${photo.id}`,
+        type: 'REPAIR_VERIFICATION',
+        title: `Repair photo ${photo.locationVerificationStatus.toLowerCase().replaceAll('_', ' ')}`,
+        description: `${photo.workOrder.complaint.complaintCode || photo.workOrder.complaint.id} · ${photo.workOrder.complaint.title}${Number.isFinite(photo.locationDistanceMetres) ? ` · ${photo.locationDistanceMetres.toFixed(1)} m from complaint location` : ''}`,
+        actor: photo.uploadedBy?.name || 'Verification service',
+        actorRole: photo.uploadedBy?.role || 'SYSTEM',
+        at: photo.locationVerifiedAt || photo.createdAt,
+        complaintCode: photo.workOrder.complaint.complaintCode || photo.workOrder.complaint.id,
       })),
     ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()).slice(0, 20);
 
