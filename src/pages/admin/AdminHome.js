@@ -1,179 +1,60 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { useCivic } from '../../context/CivicContext';
-import { Users, Building2, Activity, AlertTriangle, TrendingUp, CheckCircle, ShieldCheck, ArrowRight, UserCheck } from 'lucide-react';
+import { Activity, AlertCircle, ArrowRight, Building2, CheckCircle, Clock3, RefreshCw, ShieldCheck, Users } from 'lucide-react';
+import { useAdminDashboard } from '../../hooks/useAdminDashboard';
+
+const number = (value, loading) => loading ? '…' : (value ?? 0).toLocaleString();
 
 export function AdminHome() {
-  const { complaints, workOrders, auditLogs, users, departments } = useCivic();
-
-  const totalComplaints = complaints?.length || 0;
-  const resolved = complaints?.filter((c) => c.status === 'RESOLVED').length || 0;
-  const pending = complaints?.filter((c) => c.status === 'PENDING').length || 0;
-  const inProgress = complaints?.filter((c) => c.status === 'IN_PROGRESS' || c.status === 'UNDER_REVIEW').length || 0;
-  const resolutionRate = totalComplaints > 0 ? Math.round((resolved / totalComplaints) * 100) : 0;
-
-  const totalUsers = users?.length || 0;
-  const totalDepartments = departments?.length || 0;
-
-  const getActionBadgeColor = (action) => {
-    switch (action) {
-      case 'CREATE_USER':
-      case 'UPDATE_USER':
-        return 'border-purple-600';
-      case 'CREATE_DEPARTMENT':
-      case 'UPDATE_DEPARTMENT':
-        return 'border-blue-600';
-      case 'SUBMIT_COMPLAINT':
-        return 'border-amber-500';
-      case 'VERIFY_AND_RESOLVE':
-        return 'border-emerald-600';
-      default:
-        return 'border-blue-600';
-    }
-  };
+  const { data, loading, refreshing, error, refresh } = useAdminDashboard();
+  const stats = data?.stats || {};
+  const cards = [
+    ['Registered citizens', stats.totalRegisteredCitizens, Users, 'text-blue-600'],
+    ['Municipal officers', stats.totalMunicipalOfficers, ShieldCheck, 'text-indigo-600'],
+    ['Field supervisors', stats.totalFieldSupervisors, Users, 'text-amber-600'],
+    ['Total complaints', stats.totalComplaints, Activity, 'text-slate-700'],
+    ['Verified complaints', stats.verifiedComplaints, CheckCircle, 'text-emerald-600'],
+    ['Rejected complaints', stats.rejectedComplaints, AlertCircle, 'text-rose-600'],
+    ['Pending verification', stats.pendingVerificationComplaints, Clock3, 'text-amber-600'],
+    ['Assigned to teams', stats.assignedComplaints, Users, 'text-blue-600'],
+    ['Currently in progress', stats.inProgressComplaints, Activity, 'text-indigo-600'],
+    ['Completed complaints', stats.completedComplaints, CheckCircle, 'text-emerald-600'],
+    ['Unresolved complaints', stats.unresolvedComplaints, Clock3, 'text-orange-600'],
+  ];
 
   return (
     <div className="space-y-6">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">System Administration & Oversight</h1>
-          <p className="text-sm text-slate-500">
-            Platform telemetry, municipal operations oversight, and master administrative configurations
-          </p>
+          <h1 className="text-2xl font-bold text-slate-900">System Administration &amp; Oversight</h1>
+          <p className="text-sm text-slate-500">Live account, complaint and field operation data from CivicConnect.</p>
         </div>
-        <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3.5 py-1.5 rounded-xl text-xs font-semibold text-emerald-700 shadow-xs">
-          <ShieldCheck size={16} /> System Operational • SDG 11 Compliant
-        </div>
+        <button onClick={refresh} disabled={refreshing} className="inline-flex items-center gap-2 self-start rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50">
+          <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} /> Refresh
+        </button>
+      </header>
+
+      {error && <div role="alert" className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700"><AlertCircle size={16} />{error}<button onClick={refresh} className="ml-auto font-semibold underline">Retry</button></div>}
+
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4" aria-label="Application statistics">
+        {cards.map(([label, value, Icon, color]) => <article key={label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+          <div className="flex items-center justify-between gap-2"><p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</p><Icon className={`h-4 w-4 shrink-0 ${color}`} /></div>
+          <p className="mt-2 text-2xl font-extrabold text-slate-900">{number(value, loading)}</p>
+        </article>)}
+      </section>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+          <div className="mb-4 flex items-center justify-between"><h2 className="flex items-center gap-2 text-sm font-bold text-slate-900"><Building2 className="h-4 w-4 text-blue-600" />Municipal departments</h2><Link to="/admin/departments" className="flex items-center gap-1 text-xs font-semibold text-blue-600">Manage <ArrowRight size={13} /></Link></div>
+          {loading ? <p className="py-8 text-center text-sm text-slate-500">Loading departments…</p> : data?.departments?.length ? <div className="space-y-2">{data.departments.map((department) => <div key={department.id} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 p-3"><div><p className="text-sm font-semibold text-slate-800">{department.name}</p><p className="text-xs text-slate-500">{department.categoryCount} categories · {department._count.users} users</p></div><span className="text-right text-xs text-slate-600">{department._count.complaints} complaints<br />{department._count.workOrders} work orders</span></div>)}</div> : <p className="py-8 text-center text-sm text-slate-500">No active departments.</p>}
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+          <div className="mb-4 flex items-center justify-between"><h2 className="flex items-center gap-2 text-sm font-bold text-slate-900"><Activity className="h-4 w-4 text-blue-600" />Recent application activity</h2><Link to="/admin/audit" className="flex items-center gap-1 text-xs font-semibold text-blue-600">Audit log <ArrowRight size={13} /></Link></div>
+          {loading ? <p className="py-8 text-center text-sm text-slate-500">Loading recent activity…</p> : data?.activities?.length ? <div className="max-h-[28rem] space-y-2 overflow-y-auto">{data.activities.slice(0, 12).map((item) => <article key={item.id} className="rounded-xl border-l-2 border-blue-500 bg-slate-50 px-3 py-2"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs font-bold text-slate-800">{item.title}</p><time className="text-[10px] text-slate-500">{new Date(item.at).toLocaleString()}</time></div><p className="mt-1 text-xs text-slate-600">{item.description}</p><p className="mt-1 text-[10px] text-slate-400">By {item.actor || 'System'}{item.complaintCode ? ` · ${item.complaintCode}` : ''}</p></article>)}</div> : <p className="py-8 text-center text-sm text-slate-500">No application activity has been recorded yet.</p>}
+        </section>
       </div>
-
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="flex justify-between items-center text-slate-500 text-xs font-semibold uppercase tracking-wider">
-            <span>Total Complaints</span>
-            <Activity className="text-blue-600 w-4 h-4" />
-          </div>
-          <div className="text-2xl font-extrabold text-slate-900 mt-2">{totalComplaints}</div>
-          <div className="text-xs text-slate-500 mt-1 flex items-center justify-between">
-            <span>{pending} pending review</span>
-            <span className="text-blue-600 font-semibold">{inProgress} active</span>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="flex justify-between items-center text-slate-500 text-xs font-semibold uppercase tracking-wider">
-            <span>Active Work Orders</span>
-            <AlertTriangle className="text-amber-500 w-4 h-4" />
-          </div>
-          <div className="text-2xl font-extrabold text-slate-900 mt-2">{workOrders?.length || 0}</div>
-          <div className="text-xs text-amber-600 mt-1 font-medium">Field operations deployed</div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="flex justify-between items-center text-slate-500 text-xs font-semibold uppercase tracking-wider">
-            <span>Resolution Rate</span>
-            <TrendingUp className="text-emerald-600 w-4 h-4" />
-          </div>
-          <div className="text-2xl font-extrabold text-slate-900 mt-2">{resolutionRate}%</div>
-          <div className="text-xs text-emerald-600 mt-1 font-medium">{resolved} issues completed</div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="flex justify-between items-center text-slate-500 text-xs font-semibold uppercase tracking-wider">
-            <span>Platform Users</span>
-            <Users className="text-purple-600 w-4 h-4" />
-          </div>
-          <div className="text-2xl font-extrabold text-slate-900 mt-2">{totalUsers}</div>
-          <div className="text-xs text-slate-500 mt-1">{totalDepartments} active departments</div>
-        </div>
-      </div>
-
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Municipal Departments Status */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                <Building2 className="text-blue-600 w-4 h-4" /> Municipal Departments Status
-              </h3>
-              <Link
-                to="/admin/departments"
-                className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
-              >
-                Configure <ArrowRight size={13} />
-              </Link>
-            </div>
-
-            <div className="space-y-3">
-              {(departments || []).map((dept) => (
-                <div
-                  key={dept.id}
-                  className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center hover:bg-slate-100/70 transition"
-                >
-                  <div>
-                    <span className="font-semibold text-slate-800 text-sm">{dept.name}</span>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Head: <span className="text-slate-700">{dept.head}</span> • {dept.categories?.length || 0} categories
-                    </p>
-                  </div>
-                  <span className="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 text-xs rounded-lg font-semibold shrink-0">
-                    {dept.zone || 'Zone 1-4'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between text-xs text-slate-500">
-            <span>Total Active Municipal Units: <strong className="text-slate-800">{totalDepartments}</strong></span>
-            <Link to="/admin/departments" className="text-blue-600 font-semibold hover:underline">
-              Add New Department
-            </Link>
-          </div>
-        </div>
-
-        {/* Live System Audit Stream */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                <Activity className="text-blue-600 w-4 h-4" /> Live Platform Audit Log Stream
-              </h3>
-              <Link
-                to="/admin/audit"
-                className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
-              >
-                View Master Log <ArrowRight size={13} />
-              </Link>
-            </div>
-
-            <div className="space-y-3 text-xs max-h-80 overflow-y-auto pr-1">
-              {(auditLogs || []).slice(0, 6).map((log, idx) => (
-                <div
-                  key={log.id || idx}
-                  className={`border-l-3 ${getActionBadgeColor(log.action)} pl-3 py-1.5 bg-slate-50/70 rounded-r-xl`}
-                >
-                  <div className="flex justify-between font-bold text-slate-800">
-                    <span className="uppercase text-[11px] tracking-wide">{log.action || 'System Event'}</span>
-                    <span className="text-slate-400 font-normal text-[11px]">{log.timestamp || 'Today'}</span>
-                  </div>
-                  <div className="text-slate-600 mt-1 leading-snug">{log.details || log.description || 'Logged operation'}</div>
-                  <div className="text-slate-400 text-[10px] mt-1 font-medium">Actor: {log.actor || 'System'}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between text-xs text-slate-500">
-            <span>Total Audit Trail Records: <strong className="text-slate-800">{auditLogs?.length || 0}</strong></span>
-            <Link to="/admin/audit" className="text-blue-600 font-semibold hover:underline">
-              Search All Events
-            </Link>
-          </div>
-        </div>
-      </div>
+      {data?.refreshedAt && <p className="text-right text-[11px] text-slate-400">Updated {new Date(data.refreshedAt).toLocaleTimeString()}</p>}
     </div>
   );
 }

@@ -105,6 +105,26 @@ enum PhotoType {
   RESOLUTION_EVIDENCE
 }
 
+enum ComplaintPhotoSource {
+  CAMERA
+  GALLERY
+  TEST_SIMULATION
+}
+
+enum PhotoLocationVerificationStatus {
+  VERIFIED
+  REJECTED_LOCATION_MISMATCH
+  GPS_COORDINATES_NOT_FOUND
+  INVALID_GPS_METADATA
+  COMPLAINT_LOCATION_NOT_AVAILABLE
+  VERIFICATION_FAILED
+}
+
+enum PhotoLocationReviewDecision {
+  ACKNOWLEDGED
+  FLAGGED
+}
+
 enum WorkOrderPhotoType {
   COMPLETION
   BEFORE
@@ -176,6 +196,7 @@ model User {
   complaints                     Complaint[]              @relation("CitizenComplaints")
   assignedComplaints             Complaint[]              @relation("AssignedOfficerComplaints")
   uploadedPhotos                 ComplaintPhoto[]         @relation("PhotoUploader")
+  reviewedPhotoLocations         ComplaintPhoto[]         @relation("PhotoLocationReviewer")
   assignedWorkOrders             WorkOrder[]              @relation("AssignedSupervisorWorkOrders")
   officerAssignedWorkOrders      WorkOrder[]              @relation("OfficerAssignedWorkOrders")
   workOrderHistoryActions        WorkOrderStatusHistory[] @relation("WorkOrderHistoryActor")
@@ -287,6 +308,18 @@ model ComplaintPhoto {
   imageUrl     String    @map("image_url") @db.MediumText
   perceptualHash String? @map("perceptual_hash") @db.Char(16)
   photoType    PhotoType @default(INITIAL_EVIDENCE) @map("photo_type")
+  photoSource  ComplaintPhotoSource @default(GALLERY) @map("photo_source")
+  captureLatitude Float? @map("capture_latitude") @db.Double
+  captureLongitude Float? @map("capture_longitude") @db.Double
+  locationExtractionMethod String? @map("location_extraction_method") @db.VarChar(10)
+  capturedAt DateTime? @map("captured_at")
+  locationVerificationStatus PhotoLocationVerificationStatus @default(GPS_COORDINATES_NOT_FOUND) @map("location_verification_status")
+  locationDistanceMetres Float? @map("location_distance_metres") @db.Double
+  locationVerifiedAt DateTime? @map("location_verified_at")
+  locationReviewDecision PhotoLocationReviewDecision? @map("location_review_decision")
+  locationReviewedByUserId String? @map("location_reviewed_by_user_id") @db.VarChar(36)
+  locationReviewedAt DateTime? @map("location_reviewed_at")
+  locationReviewNotes String? @map("location_review_notes") @db.VarChar(1000)
   caption      String?   @db.VarChar(255)
   uploadedById String?   @map("uploaded_by_id") @db.VarChar(36)
   createdAt    DateTime  @default(now()) @map("created_at")
@@ -295,10 +328,13 @@ model ComplaintPhoto {
   // Cascade delete: removing a complaint cleans up its photo records
   complaint  Complaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
   uploadedBy User?     @relation("PhotoUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  locationReviewedBy User? @relation("PhotoLocationReviewer", fields: [locationReviewedByUserId], references: [id], onDelete: SetNull)
 
   @@index([complaintId])
   @@index([complaintId, photoType])
   @@index([uploadedById])
+  @@index([locationVerificationStatus])
+  @@index([locationReviewedByUserId])
   @@map("complaint_photos")
 }
 

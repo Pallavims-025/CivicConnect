@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -17,11 +17,13 @@ import {
 } from 'lucide-react';
 import { useCivic } from '../../context/CivicContext';
 import { StatusBadge, PriorityBadge } from '../../components/common/StatusBadge';
+import { DEFAULT_PHOTO_LOCATION_THRESHOLD_METRES } from '../../../shared/photoLocation.js';
+import { retryComplaintPhotoVerification } from '../../services/api';
 
 export function ComplaintDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { complaints, submitFeedback, workOrders } = useCivic();
+  const { complaints, submitFeedback, workOrders, syncPersistedComplaints } = useCivic();
 
   const complaint = complaints.find((c) => c.id === id);
 
@@ -29,6 +31,10 @@ export function ComplaintDetails() {
   const [comment, setComment] = useState('');
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackSuccess, setFeedbackSuccess] = useState(false);
+  const [retryFiles, setRetryFiles] = useState([]);
+  const [retryBusy, setRetryBusy] = useState(false);
+  const [retryError, setRetryError] = useState('');
+  const [retrySuccess, setRetrySuccess] = useState('');
 
   if (!complaint) {
     return (
@@ -49,6 +55,36 @@ export function ComplaintDetails() {
   }
 
   const linkedWorkOrder = workOrders.find((w) => w.id === complaint.workOrderId);
+  const hasVerifiedPhoto = complaint.photoLocationEvidence?.some((photo) => photo.locationVerificationStatus === 'VERIFIED');
+
+  const handleRetryPhotoVerification = async (event) => {
+    event.preventDefault();
+    if (!retryFiles.length || retryBusy) return;
+    setRetryBusy(true);
+    setRetryError('');
+    setRetrySuccess('');
+    try {
+      const photos = await Promise.all(retryFiles.map((file) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve({ imageUrl: reader.result, photoSource: 'GALLERY' });
+        reader.onerror = () => reject(new Error('A selected photograph could not be read.'));
+        reader.readAsDataURL(file);
+      })));
+      const updated = await retryComplaintPhotoVerification(complaint.databaseId || complaint.id, photos);
+      syncPersistedComplaints([
+        ...complaints.filter((item) => (item.databaseId || item.id) !== (updated.databaseId || updated.id)),
+        updated,
+      ]);
+      setRetryFiles([]);
+      setRetrySuccess(updated.photoLocationEvidence?.some((photo) => photo.locationVerificationStatus === 'VERIFIED')
+        ? 'A photograph passed location verification. The complaint is now available to the municipal department.'
+        : 'The new photograph was checked. Review its result below and upload another corrected photograph if needed.');
+    } catch (error) {
+      setRetryError(error.details?.photos || error.message || 'The corrected photograph could not be verified.');
+    } finally {
+      setRetryBusy(false);
+    }
+  };
 
   const handleFeedbackSubmit = (e) => {
     e.preventDefault();
@@ -159,6 +195,60 @@ export function ComplaintDetails() {
           </div>
         </div>
 
+        {complaint.photoLocationEvidence?.length > 0 && <section className="space-y-3">
+          <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Photo GPS verification</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{complaint.photoLocationEvidence.map((photo, index) => {
+            const status = photo.locationVerificationStatus;
+            const extractionLabel = photo.locationExtractionMethod === 'EXIF'
+              ? 'EXIF metadata'
+              : photo.locationExtractionMethod === 'OCR'
+                ? 'OCR · visible image stamp (not authenticated camera metadata)'
+                : 'No valid coordinates extracted';
+            const label = status === 'VERIFIED' ? 'Verified' : status === 'REJECTED_LOCATION_MISMATCH' ? 'REJECTED – LOCATION MISMATCH' : status === 'GPS_COORDINATES_NOT_FOUND' ? 'GPS Coordinates Not Found' : status === 'INVALID_GPS_METADATA' ? 'Invalid GPS Metadata' : status === 'COMPLAINT_LOCATION_NOT_AVAILABLE' ? 'COMPLAINT LOCATION NOT AVAILABLE' : status === 'VERIFICATION_FAILED' ? 'Verification Failed' : 'Verification pending';
+            const failureReason = {
+              REJECTED_LOCATION_MISMATCH: 'The calculated distance exceeds the 500 metre limit.',
+              GPS_COORDINATES_NOT_FOUND: 'Neither EXIF GPS metadata nor a readable GPS stamp was found on the original photograph.',
+              INVALID_GPS_METADATA: 'The photograph contains incomplete, malformed, or out-of-range GPS coordinates.',
+              COMPLAINT_LOCATION_NOT_AVAILABLE: 'Confirmed complaint coordinates are unavailable.',
+              VERIFICATION_FAILED: 'The uploaded image could not be checked for GPS metadata.',
+            }[status];
+            const style = status === 'VERIFIED' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : status === 'REJECTED_LOCATION_MISMATCH' ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-amber-200 bg-amber-50 text-amber-900';
+            return <article key={photo.id || index} className="rounded-xl border border-slate-200 p-3 space-y-2">
+              <img src={photo.imageUrl} alt={`Verified evidence ${index + 1}`} className="w-full aspect-video rounded-lg object-cover" />
+              <span className={`inline-block rounded-full border px-2 py-1 text-[10px] font-bold ${style}`}>{label}</span>
+              <p className="text-[11px] text-slate-600">Photo GPS: {Number.isFinite(photo.captureLatitude) && Number.isFinite(photo.captureLongitude) ? `${photo.captureLatitude.toFixed(6)}, ${photo.captureLongitude.toFixed(6)}` : 'Unavailable'}</p>
+              <p className="text-[11px] text-slate-600">Extraction method: {extractionLabel}</p>
+              <p className="text-[11px] text-slate-600">Confirmed complaint GPS: {Number.isFinite(complaint.latitude) && Number.isFinite(complaint.longitude) ? `${complaint.latitude.toFixed(6)}, ${complaint.longitude.toFixed(6)}` : 'Not available'}</p>
+              <p className="text-[11px] text-slate-600">Distance from reported location: {Number.isFinite(photo.locationDistanceMetres) ? `${photo.locationDistanceMetres.toFixed(1)} m` : 'Unavailable'}</p>
+              <p className="text-[11px] text-slate-600">Maximum permitted distance: {DEFAULT_PHOTO_LOCATION_THRESHOLD_METRES} m</p>
+              {failureReason && <p className="text-[11px] text-slate-700">Reason: {failureReason}</p>}
+            </article>;
+          })}</div>
+        </section>}
+
+        {!hasVerifiedPhoto && <section className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 space-y-3">
+          <div>
+            <h3 className="text-sm font-bold text-amber-950">Municipal review requires a verified photograph</h3>
+            <p className="mt-1 text-xs text-amber-900">Your complaint and history are saved. Upload a corrected original photo with EXIF GPS or a readable printed GPS stamp. The server will retry verification against the confirmed complaint location.</p>
+          </div>
+          <form onSubmit={handleRetryPhotoVerification} className="flex flex-col sm:flex-row sm:items-end gap-3">
+            <label className="flex-1 text-xs font-semibold text-slate-700">Corrected photograph(s)
+              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={(event) => {
+                const files = Array.from(event.target.files || []);
+                event.target.value = '';
+                if (files.length > 5) { setRetryError('Upload up to 5 photographs per attempt.'); return; }
+                if (files.some((file) => !file.size || file.size > 5 * 1024 * 1024)) { setRetryError('Each photograph must be 5 MB or smaller.'); return; }
+                setRetryError('');
+                setRetryFiles(files);
+              }} className="mt-1 block w-full rounded-lg border border-slate-300 bg-white p-2 text-xs" />
+            </label>
+            <button type="submit" disabled={!retryFiles.length || retryBusy} className="rounded-xl bg-civic-blue px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50">{retryBusy ? 'Checking photograph…' : 'Upload and retry verification'}</button>
+          </form>
+          {retryFiles.length > 0 && <p className="text-xs text-slate-600">{retryFiles.length} photograph(s) selected.</p>}
+          {retryError && <p role="alert" className="text-xs text-rose-700">{retryError}</p>}
+          {retrySuccess && <p role="status" className="text-xs text-emerald-800">{retrySuccess}</p>}
+        </section>}
+
         {/* Resolution Evidence (If resolved) */}
         {complaint.resolutionEvidence && complaint.resolutionEvidence.length > 0 && (
           <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-5">
@@ -224,7 +314,7 @@ export function ComplaintDetails() {
                 <div className="space-y-0.5">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-bold text-xs text-slate-900">{event.title}</span>
-                    <span className="text-[11px] text-slate-400">• {event.date}</span>
+                    <span className="text-[11px] text-slate-400">â€¢ {event.date}</span>
                     {event.by && (
                       <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-medium">
                         By: {event.by}

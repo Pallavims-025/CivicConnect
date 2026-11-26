@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Circle, CircleMarker, MapContainer, Marker, Popup, TileLayer, ZoomControl, useMap, useMapEvents } from 'react-leaflet';
+﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Circle, CircleMarker, MapContainer, Marker, Polyline, Popup, TileLayer, ZoomControl, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
@@ -9,14 +9,14 @@ import 'leaflet/dist/leaflet.css';
 const API_KEY = import.meta.env.VITE_GEOAPIFY_API_KEY;
 const TILE_URL = `https://maps.geoapify.com/v1/tile/osm-carto/{z}/{x}/{y}.png?apiKey=${encodeURIComponent(API_KEY || '')}`;
 const PLACE_GROUPS = [
-  { id: 'health', label: 'Health', icon: '✚', categories: 'healthcare.hospital,healthcare.clinic' },
-  { id: 'education', label: 'Education', icon: '▣', categories: 'education.school,education.college' },
-  { id: 'food', label: 'Food & cafes', icon: '☕', categories: 'catering.restaurant,catering.cafe' },
-  { id: 'shops', label: 'Shops', icon: '▤', categories: 'commercial.supermarket,commercial.shopping_mall' },
-  { id: 'parks', label: 'Parks', icon: '♧', categories: 'leisure.park' },
-  { id: 'transport', label: 'Transport', icon: '↗', categories: 'public_transport,public_transport.bus' },
-  { id: 'services', label: 'Public services', icon: '◆', categories: 'office.government,public_service' },
-  { id: 'landmarks', label: 'Landmarks', icon: '★', categories: 'tourism.attraction' },
+  { id: 'health', label: 'Health', icon: 'âœš', categories: 'healthcare.hospital,healthcare.clinic' },
+  { id: 'education', label: 'Education', icon: 'â–£', categories: 'education.school,education.college' },
+  { id: 'food', label: 'Food & cafes', icon: 'â˜•', categories: 'catering.restaurant,catering.cafe' },
+  { id: 'shops', label: 'Shops', icon: 'â–¤', categories: 'commercial.supermarket,commercial.shopping_mall' },
+  { id: 'parks', label: 'Parks', icon: 'â™§', categories: 'leisure.park' },
+  { id: 'transport', label: 'Transport', icon: 'â†—', categories: 'public_transport,public_transport.bus' },
+  { id: 'services', label: 'Public services', icon: 'â—†', categories: 'office.government,public_service' },
+  { id: 'landmarks', label: 'Landmarks', icon: 'â˜…', categories: 'tourism.attraction' },
 ];
 
 L.Icon.Default.mergeOptions({
@@ -121,7 +121,7 @@ export function PlaceAutocomplete({ onPlaceSelected, disabled = false }) {
     <div className="space-y-1">
       <label className="sr-only" htmlFor="civic-place-search">Search an address, street, locality, or landmark</label>
       <input id="civic-place-search" type="search" value={query} disabled={disabled} onChange={(event) => setQuery(event.target.value)} placeholder="Search an address, street, locality, or landmark" autoComplete="off" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-civic-blue disabled:opacity-60" />
-      {loading && <p className="text-[11px] text-slate-500">Searching…</p>}
+      {loading && <p className="text-[11px] text-slate-500">Searchingâ€¦</p>}
       {suggestions.length > 0 && <ul className="max-h-56 overflow-auto rounded-xl border border-slate-200 bg-white shadow-lg" role="listbox">{suggestions.map((place, index) => <li key={`${place.place_id || place.formatted}-${index}`}><button type="button" role="option" onClick={() => choose(place)} className="w-full px-3 py-2 text-left text-xs hover:bg-slate-50">{place.formatted}</button></li>)}</ul>}
       {error && <p className="text-[11px] text-rose-600">{error}</p>}
     </div>
@@ -143,7 +143,7 @@ function MapControls({ onPlaces }) {
     else await document.exitFullscreen?.();
     window.setTimeout(() => map.invalidateSize(), 150);
   };
-  return <button type="button" aria-label="Toggle map fullscreen" title="Fullscreen" onClick={toggleFullscreen} className="cc-map-fullscreen leaflet-bar">⛶</button>;
+  return <button type="button" aria-label="Toggle map fullscreen" title="Fullscreen" onClick={toggleFullscreen} className="cc-map-fullscreen leaflet-bar">â›¶</button>;
 }
 
 function NearbyPlaces({ enabled, onPlaces }) {
@@ -152,13 +152,20 @@ function NearbyPlaces({ enabled, onPlaces }) {
   return null;
 }
 
-function MapViewport({ center, selected, selectedId, complaints, focusLocation }) {
+function MapViewport({ center, selected, selectedId, complaints, focusLocation, showPhotoLocations }) {
   const map = useMap();
   useEffect(() => {
     if (selectedId) {
       const focused = complaints.find((item) => item.databaseId === selectedId);
       if (focused) {
-        map.setView([focused.latitude, focused.longitude], 18);
+        const focusPoints = [[focused.latitude, focused.longitude]];
+        if (showPhotoLocations) {
+          (focused.photoLocationEvidence || []).forEach((photo) => {
+            if (Number.isFinite(photo.captureLatitude) && Number.isFinite(photo.captureLongitude)) focusPoints.push([photo.captureLatitude, photo.captureLongitude]);
+          });
+        }
+        if (focusPoints.length > 1) map.fitBounds(focusPoints, { padding: [40, 40], maxZoom: 18 });
+        else map.setView(focusPoints[0], 18);
         return;
       }
     }
@@ -171,16 +178,23 @@ function MapViewport({ center, selected, selectedId, complaints, focusLocation }
       return;
     }
     const points = complaints.filter((item) => Number.isFinite(item.latitude) && Number.isFinite(item.longitude));
-    if (points.length === 1) map.setView([points[0].latitude, points[0].longitude], 16);
-    else if (points.length > 1) map.fitBounds(points.map((item) => [item.latitude, item.longitude]), { padding: [36, 36] });
+    const positions = points.map((item) => [item.latitude, item.longitude]);
+    if (showPhotoLocations) {
+      points.forEach((item) => (item.photoLocationEvidence || []).forEach((photo) => {
+        if (Number.isFinite(photo.captureLatitude) && Number.isFinite(photo.captureLongitude)) positions.push([photo.captureLatitude, photo.captureLongitude]);
+      }));
+    }
+    if (positions.length === 1) map.setView(positions[0], 16);
+    else if (positions.length > 1) map.fitBounds(positions, { padding: [36, 36] });
     else if (center) map.setView(center, map.getZoom());
-  }, [map, center, selected?.lat, selected?.lng, selectedId, complaints, focusLocation?.lat, focusLocation?.lng]);
+  }, [map, center, selected?.lat, selected?.lng, selectedId, complaints, focusLocation?.lat, focusLocation?.lng, showPhotoLocations]);
   return null;
 }
 
 export function LocationMap({
   center = [20, 0], zoom = 2, selected, onSelect, currentLocation,
   complaints = [], selectedId, onComplaintSelect, focusLocation,
+  showPhotoLocations = false,
   className = 'h-[360px]',
 }) {
   const onSelectRef = useRef(onSelect);
@@ -212,27 +226,39 @@ export function LocationMap({
   return (
     <div className="cc-map-wrapper relative">
       {API_KEY && <div className="absolute left-3 top-3 z-[500] flex max-w-[calc(100%-4rem)] flex-wrap gap-1.5 rounded-xl bg-white/95 p-2 shadow-md backdrop-blur">
-        {complaints.length > 0 && <button type="button" aria-pressed={showComplaints} onClick={() => setShowComplaints((value) => !value)} className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold ${showComplaints ? 'bg-rose-50 text-rose-700' : 'bg-slate-100 text-slate-500'}`}>● Complaints</button>}
+        {complaints.length > 0 && <button type="button" aria-pressed={showComplaints} onClick={() => setShowComplaints((value) => !value)} className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold ${showComplaints ? 'bg-rose-50 text-rose-700' : 'bg-slate-100 text-slate-500'}`}>â— Complaints</button>}
         {PLACE_GROUPS.map((group) => <button type="button" key={group.id} aria-pressed={nearbyEnabled.includes(group.id)} onClick={() => setNearbyEnabled((current) => current.includes(group.id) ? current.filter((item) => item !== group.id) : [...current, group.id])} className={`rounded-lg px-2 py-1.5 text-[11px] font-medium ${nearbyEnabled.includes(group.id) ? 'bg-blue-50 text-blue-700' : 'bg-slate-50 text-slate-600'}`}>{group.icon} {group.label}</button>)}
         {nearbyEnabled.length > 0 && <span className="w-full px-1 text-[10px] text-slate-500">Nearby places load from zoom 12</span>}
       </div>}
       {API_KEY ? <MapContainer center={initialCenter} zoom={zoom} scrollWheelZoom zoomControl={false} className={`cc-leaflet-map ${className}`} aria-label="Interactive street map">
         <ZoomControl position="topright" />
-        <TileLayer url={TILE_URL} maxZoom={20} attribution={'Powered by <a href="https://www.geoapify.com/" target="_blank" rel="noreferrer">Geoapify</a> | <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors</a>'} eventHandlers={{ tileerror: () => setMapError('Map tiles could not be loaded. Check the Geoapify key, quota, and network connection.') }} />
+        <TileLayer url={TILE_URL} maxZoom={20} attribution={'Powered by <a href="https://www.geoapify.com/" target="_blank" rel="noreferrer">Geoapify</a> | <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">Â© OpenStreetMap contributors</a>'} eventHandlers={{ tileerror: () => setMapError('Map tiles could not be loaded. Check the Geoapify key, quota, and network connection.') }} />
         <MapControls onPlaces={loadPlaces} />
         <NearbyPlaces enabled={nearbyEnabled} onPlaces={loadPlaces} />
         <MapClickHandler onSelectRef={onSelectRef} />
-        <MapViewport center={center} selected={selected} selectedId={selectedId} complaints={complaints} focusLocation={focusLocation} />
+        <MapViewport center={center} selected={selected} selectedId={selectedId} complaints={complaints} focusLocation={focusLocation} showPhotoLocations={showPhotoLocations} />
         {currentLocation && <>
           {Number.isFinite(currentLocation.accuracy) && currentLocation.accuracy > 0 && <Circle center={[currentLocation.lat, currentLocation.lng]} radius={currentLocation.accuracy} pathOptions={{ color: '#2563eb', opacity: 0.65, weight: 1, fillColor: '#3b82f6', fillOpacity: 0.12 }} />}
-          <CircleMarker center={[currentLocation.lat, currentLocation.lng]} radius={8} pathOptions={{ color: '#ffffff', weight: 3, fillColor: '#2563eb', fillOpacity: 1 }}><Popup>Current location{Number.isFinite(currentLocation.accuracy) ? ` · accuracy ±${Math.round(currentLocation.accuracy)} m` : ''}</Popup></CircleMarker>
+          <CircleMarker center={[currentLocation.lat, currentLocation.lng]} radius={8} pathOptions={{ color: '#ffffff', weight: 3, fillColor: '#2563eb', fillOpacity: 1 }}><Popup>Current location{Number.isFinite(currentLocation.accuracy) ? ` Â· accuracy Â±${Math.round(currentLocation.accuracy)} m` : ''}</Popup></CircleMarker>
         </>}
-        {selected && onSelect && <Marker position={[selected.lat, selected.lng]} icon={selectedLocationIcon} zIndexOffset={1000} draggable title="Selected location — drag to adjust" eventHandlers={{ dragend: (event) => { const point = event.target.getLatLng(); onSelectRef.current?.([point.lat, point.lng], 'marker'); } }} />}
+        {selected && onSelect && <Marker position={[selected.lat, selected.lng]} icon={selectedLocationIcon} zIndexOffset={1000} draggable title="Selected location â€” drag to adjust" eventHandlers={{ dragend: (event) => { const point = event.target.getLatLng(); onSelectRef.current?.([point.lat, point.lng], 'marker'); } }} />}
         {showComplaints && validComplaints.map((item) => <CircleMarker key={item.databaseId || item.id} center={[item.latitude, item.longitude]} radius={9} pathOptions={{ color: '#ffffff', weight: 2, fillColor: statusColor(item.status), fillOpacity: 1 }} eventHandlers={{ click: () => onComplaintSelectRef.current?.(item) }}><Popup><strong>{item.id}</strong><br />{item.title}</Popup></CircleMarker>)}
+        {showPhotoLocations && validComplaints.flatMap((item) => (item.photoLocationEvidence || [])
+          .filter((photo) => Number.isFinite(photo.captureLatitude) && Number.isFinite(photo.captureLongitude))
+          .map((photo, index) => {
+            const color = photo.locationVerificationStatus === 'VERIFIED' ? '#059669' : photo.locationVerificationStatus === 'REJECTED_LOCATION_MISMATCH' ? '#e11d48' : '#d97706';
+            const position = [photo.captureLatitude, photo.captureLongitude];
+            return <React.Fragment key={`${item.databaseId || item.id}-${photo.id || index}`}>
+              <Polyline positions={[[item.latitude, item.longitude], position]} pathOptions={{ color, weight: 2, dashArray: '5 5', opacity: 0.8 }} />
+              <CircleMarker center={position} radius={7} pathOptions={{ color: '#ffffff', weight: 2, fillColor: color, fillOpacity: 1 }}>
+                <Popup><strong>{'Photo location'}</strong><br />Complaint {item.id}<br />{photo.locationVerificationStatus === 'VERIFIED' ? 'Verified' : photo.locationVerificationStatus === 'REJECTED_LOCATION_MISMATCH' ? 'REJECTED – LOCATION MISMATCH' : photo.locationVerificationStatus === 'GPS_COORDINATES_NOT_FOUND' ? 'GPS Coordinates Not Found' : photo.locationVerificationStatus === 'INVALID_GPS_METADATA' ? 'Invalid GPS Metadata' : photo.locationVerificationStatus === 'COMPLAINT_LOCATION_NOT_AVAILABLE' ? 'COMPLAINT LOCATION NOT AVAILABLE' : photo.locationVerificationStatus === 'VERIFICATION_FAILED' ? 'Verification Failed' : 'Verification pending'}<br />{Number.isFinite(photo.locationDistanceMetres) ? `${photo.locationDistanceMetres.toFixed(1)} m from complaint` : 'Distance unavailable'}</Popup>
+              </CircleMarker>
+            </React.Fragment>;
+          }))}
         {places.map((feature) => {
           const group = PLACE_GROUPS.find((item) => nearbyEnabled.includes(item.id) && item.categories.split(',').some((category) => feature.properties?.categories?.includes(category.split('.')[0])));
-          const icon = L.divIcon({ className: 'cc-place-marker', html: `<span>${group?.icon || '•'}</span>`, iconSize: [27, 27], iconAnchor: [13, 13] });
-          return <Marker key={feature.properties.place_id} position={[feature.properties.lat, feature.properties.lon]} icon={icon} title={feature.properties.name || group?.label || 'Nearby place'}><Popup><strong>{group?.icon || '•'} {feature.properties.name || feature.properties.address_line1 || 'Nearby place'}</strong>{feature.properties.address_line2 && <><br />{feature.properties.address_line2}</>}</Popup></Marker>;
+          const icon = L.divIcon({ className: 'cc-place-marker', html: `<span>${group?.icon || 'â€¢'}</span>`, iconSize: [27, 27], iconAnchor: [13, 13] });
+          return <Marker key={feature.properties.place_id} position={[feature.properties.lat, feature.properties.lon]} icon={icon} title={feature.properties.name || group?.label || 'Nearby place'}><Popup><strong>{group?.icon || 'â€¢'} {feature.properties.name || feature.properties.address_line1 || 'Nearby place'}</strong>{feature.properties.address_line2 && <><br />{feature.properties.address_line2}</>}</Popup></Marker>;
         })}
       </MapContainer> : <div className={`cc-leaflet-map ${className} grid place-items-center bg-slate-100 p-6 text-center text-xs text-rose-700`} role="alert">Map is not configured. Add VITE_GEOAPIFY_API_KEY to your local .env file.</div>}
       {mapError && <div role="alert" className="absolute inset-x-3 top-3 z-[1000] rounded-lg bg-white/95 p-2 text-center text-xs text-rose-700 shadow">{mapError}</div>}

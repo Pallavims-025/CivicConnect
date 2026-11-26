@@ -36,6 +36,10 @@ async function request(path, options = {}) {
 
 export const getComplaintCategories = () => request('/complaints/categories');
 export const getMyComplaints = () => request('/complaints/mine');
+export const retryComplaintPhotoVerification = (id, photos) => request(`/complaints/${encodeURIComponent(id)}/photos/retry`, {
+  method: 'POST',
+  body: JSON.stringify({ photos }),
+});
 export const updateCitizenProfileRequest = (profile) => request('/auth/citizen-profile', { method: 'PATCH', body: JSON.stringify(profile) });
 export const updateOfficerProfileRequest = (profile) => request('/auth/officer-profile', { method: 'PATCH', body: JSON.stringify(profile) });
 export const createComplaint = (complaint) => request('/complaints', {
@@ -45,6 +49,10 @@ export const createComplaint = (complaint) => request('/complaints', {
 export const getOfficerMapComplaints = () => request('/complaints/officer-map');
 export const getOfficerComplaints = () => request('/complaints/officer');
 export const getOfficerComplaint = (id) => request(`/complaints/officer/${encodeURIComponent(id)}`);
+export const reviewComplaintPhotoLocation = (complaintId, photoId, decision, notes = '') => request(
+  `/complaints/officer/${encodeURIComponent(complaintId)}/photos/${encodeURIComponent(photoId)}/location-review`,
+  { method: 'PATCH', body: JSON.stringify({ decision, notes }) },
+);
 export const updateOfficerComplaintStatus = (id, update) => request(`/complaints/${encodeURIComponent(id)}/status`, {
   method: 'PATCH',
   body: JSON.stringify(update),
@@ -111,6 +119,17 @@ export async function fetchAdminStats() {
     return { ok: res.ok, data: json.data };
   } catch (err) {
     return { ok: false, error: err.message };
+  }
+}
+
+export async function fetchAdminDashboard(range = '30_DAYS') {
+  try {
+    const res = await fetch(`${API_BASE_URL}/admin/dashboard?range=${encodeURIComponent(range)}`, { headers: authHeaders() });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: json.error?.message || json.errors?.general || 'Could not load admin dashboard data.' };
+    return { ok: true, data: json.data };
+  } catch (err) {
+    return { ok: false, error: err.message || 'Could not reach the admin dashboard API.' };
   }
 }
 
@@ -224,6 +243,7 @@ export default {
   API_BASE_URL,
   checkBackendHealth,
   fetchAdminStats,
+  fetchAdminDashboard,
   fetchAdminUsers,
   createAdminUser,
   updateAdminUser,

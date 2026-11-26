@@ -209,6 +209,11 @@ export function MyComplaints() {
                     </td>
                     <td className="py-3.5 px-4">
                       <StatusBadge status={c.status} />
+                      <p className={`mt-1 text-[10px] font-semibold ${c.photoLocationEvidence?.some((photo) => photo.locationVerificationStatus === 'VERIFIED') ? 'text-emerald-700' : 'text-amber-700'}`}>
+                        Photo: {c.photoLocationEvidence?.some((photo) => photo.locationVerificationStatus === 'VERIFIED')
+                          ? 'VERIFIED'
+                          : c.photoLocationEvidence?.at(-1)?.locationVerificationStatus?.replaceAll('_', ' ') || 'NO PHOTOGRAPH SUBMITTED'}
+                      </p>
                     </td>
                     <td className="py-3.5 px-4 text-right">
                       <button

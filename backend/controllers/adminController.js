@@ -262,50 +262,19 @@ export async function deleteDepartment(req, res, next) {
 
 export async function getAdminStats(req, res, next) {
   try {
-    const dbOk = await isDbConnected();
-
-    if (dbOk) {
-      const [totalComplaints, resolvedComplaints, pendingComplaints, workOrdersCount, usersCount, departmentsCount] =
-        await Promise.all([
-          prisma.complaint.count(),
-          prisma.complaint.count({ where: { status: 'RESOLVED' } }),
-          prisma.complaint.count({ where: { status: 'PENDING' } }),
-          prisma.workOrder.count({ where: { status: 'IN_PROGRESS' } }),
-          prisma.user.count(),
-          prisma.department.count(),
-        ]);
-
-      const resolutionRate = totalComplaints > 0 ? Math.round((resolvedComplaints / totalComplaints) * 100) : 0;
-
-      return res.json({
-        success: true,
-        data: {
-          totalComplaints,
-          resolvedComplaints,
-          pendingComplaints,
-          workOrdersCount,
-          usersCount,
-          departmentsCount,
-          resolutionRate,
-          dbStatus: 'connected',
-        },
-        source: 'database',
-      });
-    }
-
+    const [totalComplaints, resolvedComplaints, pendingComplaints, workOrdersCount, usersCount, departmentsCount] = await Promise.all([
+      prisma.complaint.count(),
+      prisma.complaint.count({ where: { status: 'RESOLVED' } }),
+      prisma.complaint.count({ where: { status: 'PENDING' } }),
+      prisma.workOrder.count({ where: { status: { in: ['ASSIGNED', 'ACCEPTED', 'IN_PROGRESS', 'AWAITING_VERIFICATION', 'REWORK_REQUIRED'] } } }),
+      prisma.user.count(),
+      prisma.department.count({ where: { isActive: true } }),
+    ]);
+    const resolutionRate = totalComplaints ? Math.round((resolvedComplaints / totalComplaints) * 100) : 0;
     return res.json({
       success: true,
-      data: {
-        totalComplaints: 24,
-        resolvedComplaints: 18,
-        pendingComplaints: 4,
-        workOrdersCount: 5,
-        usersCount: mockUsers.length,
-        departmentsCount: mockDepartments.length,
-        resolutionRate: 75,
-        dbStatus: 'disconnected (running mock telemetry)',
-      },
-      source: 'memory_fallback',
+      data: { totalComplaints, resolvedComplaints, pendingComplaints, workOrdersCount, usersCount, departmentsCount, resolutionRate, dbStatus: 'connected' },
+      source: 'database',
     });
   } catch (err) {
     next(err);
