@@ -22,7 +22,7 @@ if (apiAlreadyRunning) {
 } else {
   children.push({
     name: 'API',
-    child: spawn(process.execPath, ['backend/server.js'], { cwd: projectRoot, stdio: 'inherit' }),
+    child: spawn(process.execPath, ['--watch', 'backend/server.js'], { cwd: projectRoot, stdio: 'inherit' }),
   });
 }
 
@@ -56,4 +56,3 @@ for (const { name, child } of children) {
 }
 process.on('SIGINT', () => stop(0));
 process.on('SIGTERM', () => stop(0));
-

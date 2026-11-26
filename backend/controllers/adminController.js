@@ -47,7 +47,9 @@ export async function getUsers(req, res, next) {
         },
         orderBy: { createdAt: 'desc' },
       });
-      return res.json({ success: true, count: users.length, data: users, source: 'database' });
+      if (users.length > 0) {
+        return res.json({ success: true, count: users.length, data: users, source: 'database' });
+      }
     }
 
     return res.json({ success: true, count: mockUsers.length, data: mockUsers, source: 'memory_fallback' });
@@ -168,7 +170,9 @@ export async function getDepartments(req, res, next) {
         },
         orderBy: { name: 'asc' },
       });
-      return res.json({ success: true, count: departments.length, data: departments, source: 'database' });
+      if (departments.length > 0) {
+        return res.json({ success: true, count: departments.length, data: departments, source: 'database' });
+      }
     }
 
     return res.json({ success: true, count: mockDepartments.length, data: mockDepartments, source: 'memory_fallback' });

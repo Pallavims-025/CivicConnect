@@ -239,6 +239,15 @@ export async function getAdminDashboard(req, res, next) {
       }),
     ]);
 
+    // If database has 0 complaints recorded yet, provide demo telemetry numbers for dashboard presentation
+    if (complaints.length === 0 && process.env.NODE_ENV !== 'production') {
+      return res.json({
+        success: true,
+        data: getMockAdminDashboardData(range),
+        source: 'empty_db_demo_fallback',
+      });
+    }
+
     const summary = summarizeComplaints(complaints, users);
     const trends = buildTrends(complaints, range);
     const departmentPerformance = new Map(departments.map((department) => [department.id, {
