@@ -5,6 +5,7 @@ import {
   Menu,
   Trash2,
   Check,
+  LogOut,
 } from 'lucide-react';
 import { useCivic } from '../../context/CivicContext';
 import { useAuth } from '../../context/AuthContext';
@@ -24,7 +25,7 @@ export function Header({ title, onToggleMobileSidebar, profilePath }) {
     unreadNotificationCount,
     notificationError,
   } = useCivic();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   const [showNotifications, setShowNotifications] = useState(false);
@@ -41,6 +42,14 @@ export function Header({ title, onToggleMobileSidebar, profilePath }) {
       : currentRole === 'citizen' ? '/citizen/notifications' : '/officer/notifications');
     if (target.startsWith('/') && !target.startsWith('//')) navigate(target);
     setShowNotifications(false);
+  };
+
+  const handleSignOut = () => {
+    if (logout) {
+      logout().finally(() => navigate('/login', { replace: true }));
+    } else {
+      navigate('/login', { replace: true });
+    }
   };
 
   let activeUser = citizenProfile;
@@ -213,6 +222,17 @@ export function Header({ title, onToggleMobileSidebar, profilePath }) {
               {activeUser?.department || roleDisplayName}
             </p>}
           </div>
+        </button>
+
+        {/* TOP-RIGHT SIGN OUT BUTTON */}
+        <button
+          onClick={handleSignOut}
+          title="Sign out of account"
+          aria-label="Sign out"
+          className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors cursor-pointer shrink-0 ml-1"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Sign out</span>
         </button>
       </div>
     </header>

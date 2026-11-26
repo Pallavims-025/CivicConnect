@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Building, Camera, CheckCircle, Key, Lock, Mail, Phone, Server, Shield, Upload, User, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Building, Camera, CheckCircle, Key, Lock, LogOut, Mail, Phone, Server, Shield, Upload, User, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { fetchAdminProfile, resolveAdminAvatarUrl, uploadAdminProfilePhoto } from '../../services/adminProfileApi';
 
@@ -12,7 +13,8 @@ function initials(name) {
 }
 
 export function AdminProfile() {
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, logout } = useAuth();
+  const navigate = useNavigate();
   const photoInputRef = useRef(null);
   const [profile, setProfile] = useState(null);
   const [pendingPhoto, setPendingPhoto] = useState('');
@@ -83,68 +85,74 @@ export function AdminProfile() {
     }
   };
 
-  const profileName = profile?.name || user?.name || '';
-  const profilePhoto = pendingPhoto || resolveAdminAvatarUrl(profile?.avatarUrl);
-  const departmentName = profile?.department?.name || 'Not assigned';
+  const handleSignOut = () => {
+    if (logout) {
+      logout().finally(() => navigate('/login', { replace: true }));
+    } else {
+      navigate('/login', { replace: true });
+    }
+  };
+
+  const currentAvatarUrl = pendingPhoto || resolveAdminAvatarUrl(profile?.avatarUrl);
+  const departmentName = profile?.department?.name || 'Municipal Information & Technology Directorate';
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div>
+      <header className="flex flex-col gap-2">
         <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          <Shield className="text-purple-600 w-6 h-6" /> Administrator Profile
+          <Shield className="h-6 w-6 text-purple-600" /> Administrator Credentials &amp; Clearance
         </h1>
-        <p className="text-sm text-slate-500">View your administrator account information and update your profile photo.</p>
-      </div>
+        <p className="text-sm text-slate-500">
+          Root administrative clearance profile, platform oversight credentials, and authentication details.
+        </p>
+      </header>
 
-      {loading && <p role="status" className="text-sm text-slate-500">Loading administrator profile…</p>}
-      {!loading && photoError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-700">{photoError}</p>}
-
-      <section className="bg-white rounded-2xl p-6 md:p-8 border border-slate-200 shadow-xs space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5 pb-6 border-b border-slate-100">
-          <div className="flex items-center gap-4 min-w-0">
-            <div className="relative shrink-0">
-              {profilePhoto && !photoFailed ? (
-                <img
-                  src={profilePhoto}
-                  alt={`${profileName || 'Administrator'} profile`}
-                  className="w-20 h-20 rounded-full object-cover ring-4 ring-purple-50"
-                  onError={() => setPhotoFailed(true)}
-                />
-              ) : (
-                <div aria-label="Administrator initials" className="w-20 h-20 rounded-full bg-purple-600 text-white flex items-center justify-center text-xl font-bold ring-4 ring-purple-50">
-                  {initials(profileName)}
-                </div>
-              )}
-              <span className="absolute -bottom-1 -right-1 rounded-full bg-white p-1.5 text-purple-600 shadow border border-slate-100" aria-hidden="true">
-                <Camera size={14} />
-              </span>
-            </div>
-            <div className="min-w-0">
-              <h2 className="text-lg font-bold text-slate-900 truncate">{profileName || (loading ? 'Loading…' : 'Administrator')}</h2>
-              <p className="text-xs text-slate-500">{profile?.title || 'Administrator'}</p>
-              <span className="inline-flex mt-2 px-2.5 py-0.5 bg-purple-50 text-purple-700 text-[11px] font-bold rounded-lg border border-purple-200">Administrator</span>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+      <section className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-5">
+          <div className="relative group shrink-0">
+            {currentAvatarUrl && !photoFailed ? (
+              <img
+                src={currentAvatarUrl}
+                alt={profile?.name || 'Administrator'}
+                className="w-20 h-20 rounded-2xl object-cover border-2 border-purple-500 shadow-sm"
+                onError={() => setPhotoFailed(true)}
+              />
+            ) : (
+              <div className="w-20 h-20 rounded-2xl bg-purple-600 text-white flex items-center justify-center text-xl font-bold border-2 border-purple-500 shadow-sm">
+                {initials(profile?.name)}
+              </div>
+            )}
+            <button
+              type="button"
+              disabled={photoBusy}
+              onClick={() => photoInputRef.current?.click()}
+              className="absolute -bottom-1.5 -right-1.5 p-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 shadow-xs hover:bg-slate-50 disabled:opacity-50"
+              aria-label="Upload profile photo"
+            >
+              <Camera size={14} />
+            </button>
             <input
               ref={photoInputRef}
               type="file"
-              accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
-              onChange={handlePhotoSelection}
+              accept={allowedMimeTypes.join(',')}
               className="hidden"
-              aria-label="Choose profile photo"
+              onChange={handlePhotoSelection}
             />
-            {!pendingPhoto ? (
-              <button
-                type="button"
-                disabled={loading || photoBusy}
-                onClick={() => photoInputRef.current?.click()}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 text-white text-xs font-semibold hover:bg-purple-700 disabled:opacity-50"
-              >
-                <Camera size={14} /> {profile?.avatarUrl ? 'Change Photo' : 'Upload Photo'}
-              </button>
-            ) : (
+          </div>
+
+          <div className="space-y-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-lg font-bold text-slate-900 truncate">{loading ? 'Loading…' : profile?.name || 'Santosh (Admin)'}</h2>
+              <span className="px-2 py-0.5 rounded-full bg-purple-50 border border-purple-200 text-purple-700 text-[10px] font-bold">
+                ROOT PRIVILEGES
+              </span>
+            </div>
+            <p className="text-xs text-slate-500">{profile?.title || 'Lead System Administrator'}</p>
+            <p className="text-xs text-slate-400">{departmentName}</p>
+          </div>
+
+          <div className="sm:ml-auto flex flex-wrap gap-2">
+            {pendingPhoto && (
               <>
                 <button type="button" disabled={photoBusy} onClick={handleSavePhoto} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 text-white text-xs font-semibold hover:bg-purple-700 disabled:opacity-50">
                   <Upload size={14} /> {photoBusy ? 'Saving…' : 'Save Photo'}
@@ -156,6 +164,8 @@ export function AdminProfile() {
             )}
           </div>
         </div>
+
+        {photoError && <div role="alert" className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs">{photoError}</div>}
 
         <p className="text-[11px] text-slate-400">JPEG, JPG, PNG, or WebP · Maximum 5 MB</p>
 
@@ -192,6 +202,21 @@ export function AdminProfile() {
             <div className="p-3 bg-slate-50 rounded-xl flex items-start gap-2.5"><Key size={16} className="text-emerald-600 shrink-0 mt-0.5" /><div><strong className="text-slate-800">Master Access Control</strong><p className="text-slate-500">Administrator access is managed by your authenticated account.</p></div></div>
             <div className="p-3 bg-slate-50 rounded-xl flex items-start gap-2.5"><Server size={16} className="text-blue-600 shrink-0 mt-0.5" /><div><strong className="text-slate-800">Database & Schema Governance</strong><p className="text-slate-500">Your profile and photo are associated with your administrator record.</p></div></div>
           </div>
+        </div>
+
+        {/* Administrator Sign Out Action */}
+        <div className="pt-5 border-t border-slate-100 flex items-center justify-between">
+          <div>
+            <h4 className="font-bold text-slate-900 text-sm">Sign Out</h4>
+            <p className="text-slate-500 text-xs">End your current administrator session and return to login.</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 transition-colors cursor-pointer"
+          >
+            <LogOut size={14} /> Sign out
+          </button>
         </div>
       </section>
     </div>
