@@ -32,7 +32,12 @@ function isLocalDevelopmentOrigin(origin) {
 }
 
 if (hasAdminConfig()) {
-  const result = await ensureConfiguredAdmin(prisma);
+  let result = {};
+  try {
+    result = await ensureConfiguredAdmin(prisma);
+  } catch (err) {
+    console.warn('[CivicConnect Backend] Database unavailable at startup. Server running with fallback handlers until MySQL is online.');
+  }
   if (result.created) console.log('[CivicConnect Backend] Configured administrator account initialized.');
   else if (result.repaired) console.log('[CivicConnect Backend] Configured administrator account password initialized.');
 }
